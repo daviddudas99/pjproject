@@ -1,4 +1,4 @@
-# $Id$
+# $Id: setup.py 4232 2012-08-20 06:01:41Z ming $
 #
 # pjsua Setup script.
 #
@@ -32,32 +32,34 @@ pj_version_suffix=""
 f = open('../../../version.mak', 'r')
 for line in f:
     if line.find("export PJ_VERSION_MAJOR") != -1:
-    	tokens=line.split("=")
-	if len(tokens)>1:
-		pj_version_major= tokens[1].strip()
+        tokens=line.split("=")
+    else:
+        tokens=[]
+    if len(tokens)>1:
+        pj_version_major= tokens[1].strip()
     elif line.find("export PJ_VERSION_MINOR") != -1:
-    	tokens=line.split("=")
-	if len(tokens)>1:
-		pj_version_minor= line.split("=")[1].strip()
+        tokens=line.split("=")
+    if len(tokens)>1:
+        pj_version_minor= line.split("=")[1].strip()
     elif line.find("export PJ_VERSION_REV") != -1:
-    	tokens=line.split("=")
-	if len(tokens)>1:
-		pj_version_rev= line.split("=")[1].strip()
+        tokens=line.split("=")
+    if len(tokens)>1:
+        pj_version_rev= line.split("=")[1].strip()
     elif line.find("export PJ_VERSION_SUFFIX") != -1:
-    	tokens=line.split("=")
-	if len(tokens)>1:
-		pj_version_suffix= line.split("=")[1].strip()
+        tokens=line.split("=")
+    if len(tokens)>1:
+        pj_version_suffix= line.split("=")[1].strip()
 
 f.close()
 if not pj_version_major:
-    print 'Unable to get PJ_VERSION_MAJOR'
+    print('Unable to get PJ_VERSION_MAJOR')
     sys.exit(1)
 
 pj_version = pj_version_major + "." + pj_version_minor
 if pj_version_rev:
-	pj_version += "." + pj_version_rev
+    pj_version += "." + pj_version_rev
 if pj_version_suffix:
-	pj_version += "-" + pj_version_suffix
+    pj_version += "-" + pj_version_suffix
 
 #print 'PJ_VERSION = "'+ pj_version + '"'
 

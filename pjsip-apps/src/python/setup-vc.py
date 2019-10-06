@@ -1,4 +1,4 @@
-# $Id$
+# $Id: setup-vc.py 4122 2012-05-14 11:04:46Z bennylp $
 #
 # pjsua Setup script for Visual Studio
 #
@@ -31,42 +31,42 @@ pj_version_suffix=""
 f = open('../../../version.mak', 'r')
 for line in f:
     if line.find("export PJ_VERSION_MAJOR") != -1:
-    	tokens=line.split("=")
-	if len(tokens)>1:
-		pj_version_major= tokens[1].strip()
+        tokens=line.split("=")
+    if len(tokens)>1:
+        pj_version_major= tokens[1].strip()
     elif line.find("export PJ_VERSION_MINOR") != -1:
-    	tokens=line.split("=")
-	if len(tokens)>1:
-		pj_version_minor= line.split("=")[1].strip()
+        tokens=line.split("=")
+    if len(tokens)>1:
+        pj_version_minor= line.split("=")[1].strip()
     elif line.find("export PJ_VERSION_REV") != -1:
-    	tokens=line.split("=")
-	if len(tokens)>1:
-		pj_version_rev= line.split("=")[1].strip()
+        tokens=line.split("=")
+    if len(tokens)>1:
+        pj_version_rev= line.split("=")[1].strip()
     elif line.find("export PJ_VERSION_SUFFIX") != -1:
-    	tokens=line.split("=")
-	if len(tokens)>1:
-		pj_version_suffix= line.split("=")[1].strip()
+        tokens=line.split("=")
+    if len(tokens)>1:
+        pj_version_suffix= line.split("=")[1].strip()
 
 f.close()
 if not pj_version_major:
-    print 'Unable to get PJ_VERSION_MAJOR'
+    print('Unable to get PJ_VERSION_MAJOR')
     sys.exit(1)
 
 pj_version = pj_version_major + "." + pj_version_minor
 if pj_version_rev:
-	pj_version += "." + pj_version_rev
+    pj_version += "." + pj_version_rev
 if pj_version_suffix:
-	pj_version += "-" + pj_version_suffix
+    pj_version += "-" + pj_version_suffix
 
 #print 'PJ_VERSION = "'+ pj_version + '"'
 
 
 # Check that extension has been built
 if not os.access('../../lib/_pjsua.pyd', os.R_OK):
-    print 'Error: file "../../lib/_pjsua.pyd" does not exist!'
-    print ''
-    print 'Please build the extension with Visual Studio first'
-    print 'For more info, see http://trac.pjsip.org/repos/wiki/Python_SIP_Tutorial'
+    print('Error: file "../../lib/_pjsua.pyd" does not exist!')
+    print('')
+    print('Please build the extension with Visual Studio first')
+    print('For more info, see http://trac.pjsip.org/repos/wiki/Python_SIP_Tutorial')
     sys.exit(1)
 
 setup(name="pjsua",

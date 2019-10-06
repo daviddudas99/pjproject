@@ -1,7 +1,8 @@
-# $Id$
+# $Id: pjsua.py 4810 2014-04-07 06:56:06Z ming $
 #
 # Object oriented PJSUA wrapper.
 #
+# Copyright (C) 2016 Matthew Williams <mgwilliams@gmail.com>
 # Copyright (C) 2003-2008 Benny Prijono <benny@prijono.org>
 #
 # This program is free software; you can redistribute it and/or modify
@@ -57,12 +58,12 @@ tutorial. The paragraphs below explain basic tasks on using this module.
 
 """
 import _pjsua
-import thread
+import _thread
 import threading
 import weakref
 import time
 
-class Error:
+class Error(BaseException):
     """Error exception class.
     
     Member documentation:
@@ -92,7 +93,7 @@ class Error:
 
     def __str__(self):
         return "Object: " + str(self.obj) + ", operation=" + self.op_name + \
-               ", error=" + self.err_msg()
+               ", error=" + str(self.err_msg())
 
 # 
 # Constants
@@ -2244,7 +2245,7 @@ class Lib:
         self._err_check("start()", self, err)
         self._has_thread = with_thread
         if self._has_thread:
-            thread.start_new(_worker_thread_main, (0,))
+            _thread.start_new(_worker_thread_main, (0,))
 
     def handle_events(self, timeout=50):
         """Poll the events from underlying pjsua library.
@@ -3003,8 +3004,8 @@ def _worker_thread_main(arg):
 def _Trace(args):
     global enable_trace
     if enable_trace:
-        print "** ",
+        print("** ", end=' ')
         for arg in args:
-            print arg,
-        print " **"
+            print(arg, end=' ')
+        print(" **")
 
