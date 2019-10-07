@@ -26,7 +26,7 @@ from collections import deque
 
 
 def log_cb(level, str, len):
-    print str,
+    print(str, end=' ')
 
 
 class AudioCB:
@@ -58,17 +58,17 @@ class MyCallCallback(pj.CallCallback):
         if self.call.info().state == pj.CallState.DISCONNECTED:
             global g_current_call
             g_current_call = None
-            print "Call hung up"
+            print("Call hung up")
 
     def on_media_state(self):
         info = self.call.info()
         call_slot = info.conf_slot
         if (info.media_state == pj.MediaState.ACTIVE) and (call_slot >= 0):
-            print "Call slot:", call_slot
+            print("Call slot:", call_slot)
             global g_acb_id
             acb_slot = lib.audio_cb_get_slot(g_acb_id)
-            print "Audio callback ", g_acb_id, "slot:", acb_slot
-            print "Starting loopback via python audio callback"
+            print("Audio callback ", g_acb_id, "slot:", acb_slot)
+            print("Starting loopback via python audio callback")
             lib.conf_connect(call_slot, acb_slot)
             lib.conf_connect(acb_slot, call_slot)
 
@@ -87,7 +87,7 @@ class MyAccountCallback(pj.AccountCallback):
 
         call.set_callback(MyCallCallback(call))
         info = call.info()
-        print "Incoming call from", info.remote_uri
+        print("Incoming call from", info.remote_uri)
         call.answer()
         g_current_call = call
 
@@ -103,8 +103,8 @@ try:
     # Create UDP transport which listens to any available port
     transport = lib.create_transport(pj.TransportType.UDP,
                                      pj.TransportConfig(0))
-    print "\nListening on", transport.info().host,
-    print "port", transport.info().port, "\n"
+    print("\nListening on", transport.info().host, end=' ')
+    print("port", transport.info().port, "\n")
 
     lib.start(True)
 
@@ -113,13 +113,13 @@ try:
 
     g_current_call = None
     g_acb_id = lib.create_audio_cb(AudioCB())
-    print "Audio callback ID:", g_acb_id
+    print("Audio callback ID:", g_acb_id)
 
-    print "\nWaiting for incoming call"
+    print("\nWaiting for incoming call")
     my_sip_uri = "sip:" + transport.info().host + \
                  ":" + str(transport.info().port)
-    print "My SIP URI is", my_sip_uri
-    print "\nPress ENTER to quit"
+    print("My SIP URI is", my_sip_uri)
+    print("\nPress ENTER to quit")
     sys.stdin.readline()
 
     # Shutdown the library
@@ -130,7 +130,7 @@ try:
     lib.destroy()
     lib = None
 
-except pj.Error, e:
-    print "Exception: " + str(e)
+except pj.Error as e:
+    print("Exception: " + str(e))
     lib.destroy()
 

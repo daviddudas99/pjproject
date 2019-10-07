@@ -2527,7 +2527,7 @@ static PyObject *py_pjsua_playlist_create(PyObject *pSelf, PyObject *pArgs)
         return NULL;
     }
 
-    label = PyString_ToPJ(pLabel);
+    label = PyUnicode_ToPJ(pLabel);
     if (!PyList_Check(pFileList))
 	return Py_BuildValue("ii", PJ_EINVAL, PJSUA_INVALID_ID);
 
@@ -2535,7 +2535,7 @@ static PyObject *py_pjsua_playlist_create(PyObject *pSelf, PyObject *pArgs)
     for (count=0; count<PyList_Size(pFileList) && 
 		  count<PJ_ARRAY_SIZE(files); ++count) 
     {
-	files[count] = PyString_ToPJ(PyList_GetItem(pFileList, count));
+	files[count] = PyUnicode_ToPJ(PyList_GetItem(pFileList, count));
     }
 
     status = pjsua_playlist_create(files, count, &label, options, &id);
@@ -2688,11 +2688,11 @@ static pj_status_t py_acb_get_frame(void *user_data, void *buffer, pj_size_t buf
 	py_ret = PyObject_CallMethod(py_obj, "cb_get_frame", "(I)", (unsigned) buf_size);
 	PyGILState_Release(state);
 
-	if (py_ret && PyString_Check(py_ret) && (PyString_Size(py_ret) >= 0)) {
-		pj_size_t returned = PyString_Size(py_ret);
+	if (py_ret && PyBytes_Check(py_ret) && (PyBytes_Size(py_ret) >= 0)) {
+		pj_size_t returned = PyBytes_Size(py_ret);
 		/* Truncate returned string if too big */
 		pj_size_t to_copy = returned > buf_size ? buf_size : returned;
-		memcpy(buffer, PyString_AsString(py_ret), to_copy);
+		memcpy(buffer, PyBytes_AsString(py_ret), to_copy);
 		/* Pad returned string with zeros if too small */
 		if (to_copy < buf_size)
 			pj_bzero((char*) buffer + to_copy, buf_size - to_copy);
@@ -2716,10 +2716,10 @@ static pj_status_t py_acb_put_frame(void *user_data, const void *buffer, pj_size
 	py_obj = (PyObject*) user_data;
 	/* We are in PJMEDIA thread, so we have to lock the Python interpreter */
 	state = PyGILState_Ensure();
-	py_ret = PyObject_CallMethod(py_obj, "cb_put_frame", "(s#)", buffer, (int) buf_size);
+	py_ret = PyObject_CallMethod(py_obj, "cb_put_frame", "(y#)", buffer, (int) buf_size);
 	PyGILState_Release(state);
 
-	ret = py_ret && PyInt_Check(py_ret) ? (pj_status_t) PyInt_AsLong(py_ret) : PJ_EINVALIDOP;
+	ret = py_ret && PyLong_Check(py_ret) ? (pj_status_t) PyLong_AsLong(py_ret) : PJ_EINVALIDOP;
 	Py_XDECREF(py_ret);
 	return ret;
 }
@@ -3270,8 +3270,8 @@ static PyObject *py_pjsua_call_make_call(PyObject *pSelf, PyObject *pArgs)
 
         omd = (PyObj_pjsua_msg_data *)pMsgData;
 
-        msg_data.content_type = PyString_ToPJ(omd->content_type);
-        msg_data.msg_body = PyString_ToPJ(omd->msg_body);
+        msg_data.content_type = PyUnicode_ToPJ(omd->content_type);
+        msg_data.msg_body = PyUnicode_ToPJ(omd->msg_body);
         pool = pjsua_pool_create("pytmp", POOL_SIZE, POOL_SIZE);
         translate_hdr(pool, &msg_data.hdr_list, omd->hdr_list);
     }

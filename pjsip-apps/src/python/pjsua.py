@@ -1492,6 +1492,41 @@ class CallCallback:
         pass
 
 
+class AudioCallback:
+    """Class to receive event notification from Call objects. 
+
+    Use lib.create_audio_cb() method to install instance of this callback 
+    class to receive/send audio frames from/to the media/call slots object.
+
+    """
+
+    def __init__(self):
+        pass
+
+    def __del__(self):
+        pass
+
+    def cb_put_frame(self, frame):
+        """
+        Notification that the slot has new audio frame.
+
+        Return:
+        The callback should return integer, value doesn't matter
+        """
+        pass
+
+    def cb_get_frame(self, size):
+        """
+        Notification that the slot requests audio frames of size
+        for playback to slot.
+
+        Return:
+        The callback should either return bytes contains frames of size
+        if available or return None
+        """
+        pass
+
+
 class CallInfo:
     """This structure contains various information about Call.
 
@@ -2719,7 +2754,7 @@ class Lib:
         callback    -- An object with one or both of methods:
                        string cb_get_frame(int) should return a string
                            containing audio data of specified length
-                       int cb_get_frame(string) should process the string
+                       int cb_put_frame(string) should process the string
                            containing audio data. Return code does not matter.
 
         Return:
@@ -3008,4 +3043,3 @@ def _Trace(args):
         for arg in args:
             print(arg, end=' ')
         print(" **")
-
