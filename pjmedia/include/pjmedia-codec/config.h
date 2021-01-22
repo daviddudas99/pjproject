@@ -144,6 +144,19 @@
 #   define PJMEDIA_HAS_G722_CODEC    1
 #endif
 
+/**
+ * Initial memory block for G.722 codec implementation.
+ */
+#ifndef PJMEDIA_POOL_LEN_G722_CODEC
+#   define PJMEDIA_POOL_LEN_G722_CODEC  1000
+#endif
+
+/**
+ * Memory increment for G.722 codec implementation.
+ */
+#ifndef PJMEDIA_POOL_INC_G722_CODEC
+#   define PJMEDIA_POOL_INC_G722_CODEC  1000
+#endif
 
 /**
  * Default G.722 codec encoder and decoder level adjustment. The G.722
@@ -568,6 +581,35 @@
 #   else
 #	define PJMEDIA_HAS_FFMPEG_CODEC_H264	PJMEDIA_HAS_FFMPEG_VID_CODEC
 #   endif
+#endif
+
+/**
+ * Determine the log level of the native openH264 log which will be forwarded
+ * to the library's log.
+ * Set to WELS_LOG_QUIET to disable logging, or WELS_LOG_DETAIL for debugging.
+ *
+ * Default: WELS_LOG_ERROR.
+ */
+#ifndef PJMEDIA_CODEC_OPENH264_LOG_LEVEL
+#   define PJMEDIA_CODEC_OPENH264_LOG_LEVEL  WELS_LOG_ERROR
+#endif
+
+/**
+ * Enable VPX VP8 codec.
+ *
+ * Default: 1
+ */
+#ifndef PJMEDIA_HAS_VPX_CODEC_VP8
+#   define PJMEDIA_HAS_VPX_CODEC_VP8		1
+#endif
+
+/**
+ * Enable VPX VP9 codec.
+ *
+ * Default: 0 (disabled)
+ */
+#ifndef PJMEDIA_HAS_VPX_CODEC_VP9
+#   define PJMEDIA_HAS_VPX_CODEC_VP9		0
 #endif
 
 /**

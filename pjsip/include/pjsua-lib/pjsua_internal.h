@@ -42,6 +42,7 @@ struct pjsua_call_media
     pjsua_call		*call;	    /**< Parent call.			    */
     pjmedia_type	 type;	    /**< Media type.			    */
     unsigned		 idx;       /**< This media index in parent call.   */
+    pj_str_t		 rem_mid;   /**< Remote SDP "a=mid" attribute.	    */
     pjsua_call_media_status state;  /**< Media state.			    */
     pjsua_call_media_status prev_state;/**< Previous media state.           */
     pjmedia_dir		 dir;       /**< Media direction.		    */
@@ -205,6 +206,22 @@ struct pjsua_call
 					    created yet. This temporary 
 					    variable is used to handle such 
 					    case, see ticket #1916.	    */
+
+    struct {
+	pj_bool_t	 enabled;
+	pj_bool_t	 remote_sup;
+	pj_bool_t	 remote_dlg_est;
+	pj_bool_t	 trickling;
+	int		 retrans18x_count;
+	pj_bool_t	 pending_info;
+	pj_timer_entry	 timer;
+    } trickle_ice;
+
+    pj_timer_entry	 hangup_timer;	/**< Hangup retry timer.	    */
+    unsigned		 hangup_retry;	/**< Number of hangup retries.	    */
+    unsigned		 hangup_code;	/**< Hangup code.	    	    */
+    pj_str_t		 hangup_reason;	/**< Hangup reason.	    	    */
+    pjsua_msg_data	*hangup_msg_data;/**< Hangup message data.	    */
 };
 
 
@@ -425,6 +442,15 @@ typedef struct pjsua_timer_list
 } pjsua_timer_list;
 
 
+typedef struct pjsua_event_list 
+{
+    PJ_DECL_LIST_MEMBER(struct pjsua_event_list);
+    pjmedia_event       event;
+    pjsua_call_id	call_id;
+    unsigned           	med_idx;
+} pjsua_event_list;
+
+
 /**
  * Global pjsua application data.
  */
@@ -434,6 +460,7 @@ struct pjsua_data
     /* Control: */
     pj_caching_pool	 cp;	    /**< Global pool factory.		*/
     pj_pool_t		*pool;	    /**< pjsua's private pool.		*/
+    pj_pool_t		*timer_pool;/**< pjsua's timer pool.		*/
     pj_mutex_t		*mutex;	    /**< Mutex protection for this data	*/
     unsigned		 mutex_nesting_level; /**< Mutex nesting level.	*/
     pj_thread_t		*mutex_owner; /**< Mutex owner.			*/
@@ -536,8 +563,9 @@ struct pjsua_data
     pjsua_vid_win	 win[PJSUA_MAX_VID_WINS]; /**< Array of windows	*/
 #endif
 
-    /* Timer entry list */
+    /* Timer entry and event list */
     pjsua_timer_list	 timer_list;
+    pjsua_event_list	 event_list;
     pj_mutex_t          *timer_mutex;
 };
 
@@ -684,6 +712,8 @@ pj_status_t pjsua_media_channel_update(pjsua_call_id call_id,
 				       const pjmedia_sdp_session *local_sdp,
 				       const pjmedia_sdp_session *remote_sdp);
 pj_status_t pjsua_media_channel_deinit(pjsua_call_id call_id);
+
+void pjsua_ice_check_start_trickling(pjsua_call *call, pjsip_event *e);
 
 /*
  * Error message when media operation is requested while another is in progress
@@ -896,6 +926,11 @@ pj_status_t pjsua_acc_update_contact_on_ip_change(pjsua_acc *acc);
  * Call handling per account on IP change process.
  */
 pj_status_t pjsua_acc_handle_call_on_ip_change(pjsua_acc *acc);
+
+/*
+ * End IP change process per account.
+ */
+void pjsua_acc_end_ip_change(pjsua_acc *acc);
 
 PJ_END_DECL
 

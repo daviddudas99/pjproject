@@ -36,6 +36,9 @@
  */
 #define AUTO_STOP_CLOCK 0
 
+/* Maximum number of consecutive errors that will only be printed once. */
+#define MAX_ERR_COUNT 150
+
 /* Clockrate for video timestamp unit */
 #define TS_CLOCK_RATE	90000
 
@@ -99,6 +102,9 @@ typedef struct vconf_port
     pj_pool_t	       **render_pool;	/**< Array of pool for render state */
     render_state       **render_states;	/**< Array of render_state (one for
 					     each transmitter).		    */
+
+    pj_status_t		  last_err;	/**< Last error status.		    */
+    unsigned		  last_err_cnt;	/**< Last error count.		    */
 } vconf_port;
 
 
@@ -544,6 +550,30 @@ PJ_DEF(pj_status_t) pjmedia_vid_conf_connect_port(
 	++src_port->listener_cnt;
 	++dst_port->transmitter_cnt;
 
+	if (src_port->listener_cnt == 1) {
+    	    /* If this is the first listener, initialize source's buffer
+    	     * with black color.
+    	     */
+	    const pjmedia_video_format_info *vfi;
+	    pjmedia_video_apply_fmt_param vafp;
+
+	    vfi = pjmedia_get_video_format_info(NULL,
+	    					src_port->port->info.fmt.id);
+	    pj_bzero(&vafp, sizeof(vafp));
+	    vafp.size = src_port->port->info.fmt.det.vid.size;
+	    (*vfi->apply_fmt)(vfi, &vafp);
+
+	    if (vfi->color_model == PJMEDIA_COLOR_MODEL_RGB) {
+	    	pj_memset(src_port->get_buf, 0, vafp.framebytes);
+	    } else if (src_port->port->info.fmt.id == PJMEDIA_FORMAT_I420 ||
+	  	       src_port->port->info.fmt.id == PJMEDIA_FORMAT_YV12)
+	    {	    	
+	    	pj_memset(src_port->get_buf, 16, vafp.plane_bytes[0]);
+	    	pj_memset((pj_uint8_t*)src_port->get_buf + vafp.plane_bytes[0],
+		      	  0x80, vafp.plane_bytes[1] * 2);
+	    }
+	}
+
 	update_render_state(vid_conf, dst_port);
 
 	++vid_conf->connect_cnt;
@@ -608,10 +638,9 @@ PJ_DEF(pj_status_t) pjmedia_vid_conf_disconnect_port(
 	    break;
     }
 
-    if (i != src_port->listener_cnt) {
+    if (i != src_port->listener_cnt && j != dst_port->transmitter_cnt) {
 	unsigned k;
 
-	pj_assert(j != dst_port->transmitter_cnt);
 	pj_assert(src_port->listener_cnt > 0 && 
 		  src_port->listener_cnt < vid_conf->opt.max_slot_cnt);
 	pj_assert(dst_port->transmitter_cnt > 0 && 
@@ -735,8 +764,8 @@ static void on_clock_tick(const pj_timestamp *now, void *user_data)
 		status = pjmedia_port_get_frame(src->port, &frame);
 		if (status != PJ_SUCCESS) {
 		    PJ_PERROR(5, (THIS_FILE, status,
-				  "Failed to get frame from port [%s]!",
-				  src->port->info.name.ptr));
+				  "Failed to get frame from port %d [%s]!",
+				  src->idx, src->port->info.name.ptr));
 		}
 
 		/* Update next src put/get */
@@ -750,9 +779,10 @@ static void on_clock_tick(const pj_timestamp *now, void *user_data)
 	    status = render_src_frame(src, sink, j);
 	    if (status != PJ_SUCCESS) {
 		PJ_PERROR(5, (THIS_FILE, status,
-			      "Failed to render frame from port [%s] to [%s]",
-			      src->port->info.name.ptr,
-			      sink->port->info.name.ptr));
+			      "Failed to render frame from port %d [%s] to "
+			      "%d [%s]",
+			      src->idx, src->port->info.name.ptr,
+			      sink->idx, sink->port->info.name.ptr));
 	    }
 
 	    got_frame = PJ_TRUE;
@@ -771,10 +801,22 @@ static void on_clock_tick(const pj_timestamp *now, void *user_data)
 	    frame.size = sink->put_buf_size;
 	}
 	status = pjmedia_port_put_frame(sink->port, &frame);
-	if (status != PJ_SUCCESS) {
-	    PJ_PERROR(5, (THIS_FILE, status,
-			  "Failed to put frame to port [%s]!",
-			  sink->port->info.name.ptr));
+	if (got_frame && status != PJ_SUCCESS) {
+	    sink->last_err_cnt++;
+	    if (sink->last_err != status ||
+	        sink->last_err_cnt % MAX_ERR_COUNT == 0)
+	    {
+		if (sink->last_err != status)
+		    sink->last_err_cnt = 1;
+		sink->last_err = status;
+	    	PJ_PERROR(5, (THIS_FILE, status,
+			      "Failed (%d time(s)) to put frame to port %d"
+			      " [%s]!", sink->last_err_cnt,
+			      sink->idx, sink->port->info.name.ptr));
+	    }
+	} else {
+	    sink->last_err = status;
+	    sink->last_err_cnt = 0;
 	}
 
 	/* Update next put/get, careful that it may have been updated

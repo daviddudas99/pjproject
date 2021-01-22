@@ -25,6 +25,8 @@
 using namespace pj;
 using namespace std;
 
+#include <pjsua-lib/pjsua_internal.h>
+
 #define THIS_FILE		"media.cpp"
 #define MAX_FILE_NAMES 		64
 #define MAX_DEV_COUNT		64
@@ -302,7 +304,7 @@ void AudioMediaPlayer::createPlayer(const string &file_name,
 	pjsua_player_destroy(playerId);
 	PJSUA2_RAISE_ERROR2(status, "AudioMediaPlayer::createPlayer()");
     }
-    status = pjmedia_wav_player_set_eof_cb(port, this, &eof_cb);
+    status = pjmedia_wav_player_set_eof_cb2(port, this, &eof_cb);
     if (status != PJ_SUCCESS) {
 	pjsua_player_destroy(playerId);
 	PJSUA2_RAISE_ERROR2(status, "AudioMediaPlayer::createPlayer()");
@@ -350,7 +352,7 @@ void AudioMediaPlayer::createPlaylist(const StringVector &file_names,
 	pjsua_player_destroy(playerId);
 	PJSUA2_RAISE_ERROR2(status, "AudioMediaPlayer::createPlaylist()");
     }
-    status = pjmedia_wav_playlist_set_eof_cb(port, this, &eof_cb);
+    status = pjmedia_wav_playlist_set_eof_cb2(port, this, &eof_cb);
     if (status != PJ_SUCCESS) {
 	pjsua_player_destroy(playerId);
 	PJSUA2_RAISE_ERROR2(status, "AudioMediaPlayer::createPlaylist()");
@@ -398,12 +400,13 @@ AudioMediaPlayer* AudioMediaPlayer::typecastFromAudioMedia(
     return static_cast<AudioMediaPlayer*>(media);
 }
 
-pj_status_t AudioMediaPlayer::eof_cb(pjmedia_port *port,
-                                     void *usr_data)
+void AudioMediaPlayer::eof_cb(pjmedia_port *port,
+                              void *usr_data)
 {
     PJ_UNUSED_ARG(port);
     AudioMediaPlayer *player = (AudioMediaPlayer*)usr_data;
-    return player->onEof() ? PJ_SUCCESS : PJ_EEOF;
+    
+    player->onEof2();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1279,6 +1282,16 @@ void VideoWindow::setWindow(const VideoWindowHandle &win) PJSUA2_THROW(Error)
     PJ_UNUSED_ARG(win);
 #endif
 }
+
+void VideoWindow::setFullScreen(bool enabled) PJSUA2_THROW(Error)
+{
+#if PJSUA_HAS_VIDEO
+    PJSUA2_CHECK_EXPR( pjsua_vid_win_set_fullscreen(winId, enabled) );
+#else
+    PJ_UNUSED_ARG(enabled);
+#endif
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 VideoPreviewOpParam::VideoPreviewOpParam()
 {
@@ -1322,7 +1335,7 @@ pjsua_vid_preview_param VideoPreviewOpParam::toPj() const
 }
 
 VideoPreview::VideoPreview(int dev_id) 
-: devId(dev_id)
+: devId(dev_id), winId(PJSUA_INVALID_ID)
 {
 
 }
@@ -1341,6 +1354,11 @@ void VideoPreview::start(const VideoPreviewOpParam &param) PJSUA2_THROW(Error)
 #if PJSUA_HAS_VIDEO
     pjsua_vid_preview_param prm = param.toPj();
     PJSUA2_CHECK_EXPR(pjsua_vid_preview_start(devId, &prm));
+
+    /* Device may be fast-switched and VideoPreview will not aware of that,
+     * so better keep win ID too.
+     */
+    winId = pjsua_vid_preview_get_win(devId);
 #else
     PJ_UNUSED_ARG(param);
     PJ_UNUSED_ARG(devId);
@@ -1350,14 +1368,15 @@ void VideoPreview::start(const VideoPreviewOpParam &param) PJSUA2_THROW(Error)
 void VideoPreview::stop() PJSUA2_THROW(Error)
 {
 #if PJSUA_HAS_VIDEO
-    pjsua_vid_preview_stop(devId);
+    updateDevId();
+    PJSUA2_CHECK_EXPR(pjsua_vid_preview_stop(devId));
 #endif
 }
 
 VideoWindow VideoPreview::getVideoWindow()
 {
 #if PJSUA_HAS_VIDEO
-    return (VideoWindow(pjsua_vid_preview_get_win(devId)));
+    return (VideoWindow(winId));
 #else
     return (VideoWindow(PJSUA_INVALID_ID));
 #endif
@@ -1366,6 +1385,7 @@ VideoWindow VideoPreview::getVideoWindow()
 VideoMedia VideoPreview::getVideoMedia() PJSUA2_THROW(Error)
 {
 #if PJSUA_HAS_VIDEO
+    updateDevId();
     pjsua_conf_port_id id = pjsua_vid_preview_get_vid_conf_port(devId);
     if (id != PJSUA_INVALID_ID) {
 	VideoMediaHelper vm;
@@ -1376,6 +1396,22 @@ VideoMedia VideoPreview::getVideoMedia() PJSUA2_THROW(Error)
     }
 #else
     PJSUA2_RAISE_ERROR(PJ_EINVALIDOP);
+#endif
+}
+
+/* Device may be fastswitched and VideoPreview will not aware of that,
+ * this function will update the VideoPreview device ID.
+ */
+void VideoPreview::updateDevId()
+{
+#if PJSUA_HAS_VIDEO
+    if (winId != PJSUA_INVALID_ID) {
+	PJSUA_LOCK();
+	pjsua_vid_win *w = &pjsua_var.win[winId];
+	pj_assert(w->type == PJSUA_WND_TYPE_PREVIEW);
+	devId = w->preview_cap_id;
+	PJSUA_UNLOCK();
+    }
 #endif
 }
 
@@ -1810,6 +1846,32 @@ pjmedia_codec_param CodecParam::toPj() const
     CodecFmtpUtil::toPj(setting.encFmtp, param.setting.enc_fmtp);
     CodecFmtpUtil::toPj(setting.decFmtp, param.setting.dec_fmtp);
     return param;
+}
+
+pjmedia_codec_opus_config CodecOpusConfig::toPj() const
+{
+    pjmedia_codec_opus_config config;
+
+    config.sample_rate = sample_rate;
+    config.channel_cnt = channel_cnt;
+    config.frm_ptime = frm_ptime;
+    config.bit_rate = bit_rate;
+    config.packet_loss = packet_loss;
+    config.complexity = complexity;
+    config.cbr = cbr;
+
+    return config;
+}
+
+void CodecOpusConfig::fromPj(const pjmedia_codec_opus_config &config)
+{
+    sample_rate = config.sample_rate;
+    channel_cnt = config.channel_cnt;
+    frm_ptime = config.frm_ptime;
+    bit_rate = config.bit_rate;
+    packet_loss = config.packet_loss;
+    complexity = config.complexity;
+    cbr = PJ2BOOL(config.cbr);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -792,7 +792,6 @@ PJ_DEF(pj_status_t) pjmedia_vid_port_start(pjmedia_vid_port *vp)
         const pjmedia_video_format_info *vfi;
         const pjmedia_format *fmt;
 	pjmedia_video_apply_fmt_param vafp;
-	pj_status_t status;
 	pjmedia_frame frame;
 
 	pj_bzero(&frame, sizeof(pjmedia_frame));
@@ -1003,11 +1002,22 @@ static pj_status_t client_port_event_cb(pjmedia_event *event,
                                                 PJMEDIA_VID_DEV_CAP_FORMAT,
                                                 &vp->conv.conv_param.dst);
             if (status != PJ_SUCCESS) {
+		pjmedia_event e;
+
                 PJ_PERROR(3,(THIS_FILE, status,
 		    "failure in changing the format of the video device"));
                 PJ_LOG(3, (THIS_FILE, "reverting to its original format: %s",
                                       status != PJMEDIA_EVID_ERR ? "success" :
                                       "failure"));
+
+		pjmedia_event_init(&e, PJMEDIA_EVENT_VID_DEV_ERROR, NULL, vp);
+		e.data.vid_dev_err.dir = vp->dir;
+		e.data.vid_dev_err.status = status;
+		e.data.vid_dev_err.id = (vp->dir==PJMEDIA_DIR_ENCODING?
+					 vid_param.cap_id : vid_param.rend_id);
+		pjmedia_event_publish(NULL, vp, &e,
+				      PJMEDIA_EVENT_PUBLISH_POST_EVENT);
+
                 return status;
             }
         }

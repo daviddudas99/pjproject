@@ -205,8 +205,11 @@ static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
 	    find_next_call();
 	}
 
-	/* Dump media state upon disconnected */
-	if (1) {
+	/* Dump media state upon disconnected.
+	 * Moved to on_stream_destroyed() since media has been deactivated
+	 * upon disconnection.
+	 */
+	if (0) {
 	    PJ_LOG(5,(THIS_FILE, 
 		      "Call %d disconnected, dumping media stats..", 
 		      call_id));
@@ -268,6 +271,21 @@ static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
 	if (current_call==PJSUA_INVALID_ID)
 	    current_call = call_id;
 
+    }
+}
+
+/*
+ * Handler when audio stream is destroyed.
+ */
+static void on_stream_destroyed(pjsua_call_id call_id,
+                                pjmedia_stream *strm,
+				unsigned stream_idx)
+{
+    if (1) {
+	PJ_LOG(5,(THIS_FILE, 
+		  "Call %d stream %d destroyed, dumping media stats..", 
+		  call_id, stream_idx));
+	log_call_dump(call_id);
     }
 }
 
@@ -822,9 +840,11 @@ static void on_transport_state(pjsip_transport *tp,
     case PJSIP_TP_STATE_DISCONNECTED:
 	{
 	    char buf[100];
+	    int len;
 
-	    snprintf(buf, sizeof(buf), "SIP %s transport is disconnected "
-		    "from %s", tp->type_name, host_port);
+	    len = pj_ansi_snprintf(buf, sizeof(buf), "SIP %s transport is "
+	    	      "disconnected from %s", tp->type_name, host_port);
+	    PJ_CHECK_TRUNC_STR(len, buf, sizeof(buf));
 	    pjsua_perror(THIS_FILE, buf, info->status);
 	}
 	break;
@@ -1001,7 +1021,7 @@ static pjmedia_transport* on_create_media_transport(pjsua_call_id call_id,
 #endif
 
 /* Playfile done notification, set timer to hangup calls */
-pj_status_t on_playfile_done(pjmedia_port *port, void *usr_data)
+void on_playfile_done(pjmedia_port *port, void *usr_data)
 {
     pj_time_val delay;
 
@@ -1011,12 +1031,11 @@ pj_status_t on_playfile_done(pjmedia_port *port, void *usr_data)
     /* Just rewind WAV when it is played outside of call */
     if (pjsua_call_get_count() == 0) {
 	pjsua_player_set_pos(app_config.wav_id, 0);
-	return PJ_SUCCESS;
     }
 
     /* Timer is already active */
     if (app_config.auto_hangup_timer.id == 1)
-	return PJ_SUCCESS;
+	return;
 
     app_config.auto_hangup_timer.id = 1;
     delay.sec = 0;
@@ -1024,8 +1043,73 @@ pj_status_t on_playfile_done(pjmedia_port *port, void *usr_data)
     pjsip_endpt_schedule_timer(pjsua_get_pjsip_endpt(), 
 			       &app_config.auto_hangup_timer, 
 			       &delay);
+}
 
-    return PJ_SUCCESS;
+/* IP change progress callback. */
+void on_ip_change_progress(pjsua_ip_change_op op,
+			   pj_status_t status,
+			   const pjsua_ip_change_op_info *info)
+{
+    char info_str[128];
+    pjsua_acc_info acc_info;
+    pjsua_transport_info tp_info;
+
+    if (status == PJ_SUCCESS) {
+	switch (op) {
+	case PJSUA_IP_CHANGE_OP_RESTART_LIS:
+	    pjsua_transport_get_info(info->lis_restart.transport_id, &tp_info);
+	    pj_ansi_snprintf(info_str, sizeof(info_str),
+			     "restart transport %.*s",
+			     (int)tp_info.info.slen, tp_info.info.ptr);
+	    break;
+	case PJSUA_IP_CHANGE_OP_ACC_SHUTDOWN_TP:
+	    pjsua_acc_get_info(info->acc_shutdown_tp.acc_id, &acc_info);
+
+	    pj_ansi_snprintf(info_str, sizeof(info_str),
+			     "transport shutdown for account %.*s",
+			     (int)acc_info.acc_uri.slen,
+			     acc_info.acc_uri.ptr);
+	    break;
+	case PJSUA_IP_CHANGE_OP_ACC_UPDATE_CONTACT:
+	    pjsua_acc_get_info(info->acc_shutdown_tp.acc_id, &acc_info);
+	    if (info->acc_update_contact.code) {
+		pj_ansi_snprintf(info_str, sizeof(info_str),
+				 "update contact for account %.*s, code[%d]",
+				 (int)acc_info.acc_uri.slen,
+				 acc_info.acc_uri.ptr,
+				 info->acc_update_contact.code);
+	    } else {
+		pj_ansi_snprintf(info_str, sizeof(info_str),
+				 "update contact for account %.*s",
+				 (int)acc_info.acc_uri.slen,
+				 acc_info.acc_uri.ptr);
+	    }
+	    break;
+	case PJSUA_IP_CHANGE_OP_ACC_HANGUP_CALLS:
+	    pjsua_acc_get_info(info->acc_shutdown_tp.acc_id, &acc_info);
+	    pj_ansi_snprintf(info_str, sizeof(info_str),
+			     "hangup call for account %.*s, call_id[%d]",
+			     (int)acc_info.acc_uri.slen, acc_info.acc_uri.ptr,
+			     info->acc_hangup_calls.call_id);
+	    break;
+	case PJSUA_IP_CHANGE_OP_ACC_REINVITE_CALLS:
+	    pjsua_acc_get_info(info->acc_shutdown_tp.acc_id, &acc_info);
+	    pj_ansi_snprintf(info_str, sizeof(info_str),
+			     "reinvite call for account %.*s, call_id[%d]",
+			     (int)acc_info.acc_uri.slen, acc_info.acc_uri.ptr,
+			     info->acc_reinvite_calls.call_id);
+	    break;
+	case PJSUA_IP_CHANGE_OP_COMPLETED:
+	    pj_ansi_snprintf(info_str, sizeof(info_str),
+			     "done");
+	default:
+	    break;
+	}
+	PJ_LOG(3,(THIS_FILE, "IP change progress report : %s", info_str));
+
+    } else {
+	PJ_PERROR(3,(THIS_FILE, status, "IP change progress fail"));
+    }
 }
 
 /* Auto hangup timer callback */
@@ -1251,6 +1335,7 @@ int stdout_refresh_proc(void *arg)
     return 0;
 }
 
+
 static pj_status_t app_init(void)
 {
     pjsua_transport_id transport_id = -1;
@@ -1285,6 +1370,7 @@ static pj_status_t app_init(void)
 
     /* Initialize application callbacks */
     app_config.cfg.cb.on_call_state = &on_call_state;
+    app_config.cfg.cb.on_stream_destroyed = &on_stream_destroyed;
     app_config.cfg.cb.on_call_media_state = &on_call_media_state;
     app_config.cfg.cb.on_incoming_call = &on_incoming_call;
     app_config.cfg.cb.on_dtmf_digit2 = &call_on_dtmf_callback2;
@@ -1303,6 +1389,7 @@ static pj_status_t app_init(void)
     app_config.cfg.cb.on_ice_transport_error = &on_ice_transport_error;
     app_config.cfg.cb.on_snd_dev_operation = &on_snd_dev_operation;
     app_config.cfg.cb.on_call_media_event = &on_call_media_event;
+    app_config.cfg.cb.on_ip_change_progress = &on_ip_change_progress;
 #ifdef TRANSPORT_ADAPTER_SAMPLE
     app_config.cfg.cb.on_create_media_transport = &on_create_media_transport;
 #endif
@@ -1360,8 +1447,8 @@ static pj_status_t app_init(void)
 		pjmedia_port *port;
 
 		pjsua_player_get_port(app_config.wav_id, &port);
-		status = pjmedia_wav_player_set_eof_cb(port, NULL, 
-						       &on_playfile_done);
+		status = pjmedia_wav_player_set_eof_cb2(port, NULL, 
+						        &on_playfile_done);
 		if (status != PJ_SUCCESS)
 		    goto on_error;
 

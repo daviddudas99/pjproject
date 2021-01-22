@@ -888,14 +888,14 @@ static pj_bool_t on_data_sent(pj_turn_sock *turn_sock,
 			      pj_ioqueue_op_key_t *send_key,
 			      pj_ssize_t sent)
 {
-    unsigned header_len, sent_size;
-
     /* Don't report to callback if this is internal message. */
     if (send_key == &turn_sock->int_send_key) {
 	return PJ_TRUE;
     }
 
     if (turn_sock->cb.on_data_sent) {
+	pj_ssize_t header_len, sent_size;
+
         /* Remove the length of packet header from sent size. */
 	header_len = turn_sock->pkt_len - turn_sock->body_len;
 	sent_size = (sent > header_len)? (sent - header_len) : 0;
@@ -1588,7 +1588,9 @@ static void turn_on_connection_attempt(pj_turn_session *sess,
 	if (turn_sock->data_conn[i].state == DATACONN_STATE_NULL)
 	    break;
     }
-    pj_assert(i < turn_sock->data_conn_cnt);
+
+    /* Verify that a free slot is found */
+    pj_assert(i < PJ_TURN_MAX_TCP_CONN_CNT);
     ++turn_sock->data_conn_cnt;
 
     /* Init new data connection */

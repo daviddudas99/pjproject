@@ -1295,6 +1295,9 @@ static void tsx_set_state( pjsip_transaction *tsx,
 	    if (tsx->pending_tx) {
 		tsx->pending_tx->mod_data[mod_tsx_layer.mod.id] = NULL;
 		tsx->pending_tx = NULL;
+
+		/* Decrease pending send counter */
+		pj_grp_lock_dec_ref(tsx->grp_lock);
 	    }
 	    tsx->transport_flag &= ~(TSX_HAS_PENDING_TRANSPORT);
 	}
@@ -1856,8 +1859,10 @@ static void send_msg_callback( pjsip_send_state *send_state,
 	/* Decrease pending send counter, but only if the transaction layer
 	 * hasn't been shutdown.
 	 */
-	if (mod_tsx_layer.mod.id >= 0)
-	    pj_grp_lock_dec_ref(tsx->grp_lock);
+	// If tsx has cancelled itself from this transmit notification
+	// it should have also decreased pending send counter.
+	//if (mod_tsx_layer.mod.id >= 0)
+	//    pj_grp_lock_dec_ref(tsx->grp_lock);
 
 	return;
     }
@@ -2025,6 +2030,10 @@ static void transport_callback(void *token, pjsip_tx_data *tdata,
 {
     pjsip_transaction *tsx = (pjsip_transaction*) token;
 
+    /* Check if the transaction layer has been shutdown. */
+    if (mod_tsx_layer.mod.id < 0)
+	return;
+
     /* In other circumstances, locking tsx->grp_lock AFTER transport mutex
      * will introduce deadlock if another thread is currently sending a
      * SIP message to the transport. But this should be safe as there should
@@ -2033,6 +2042,38 @@ static void transport_callback(void *token, pjsip_tx_data *tdata,
      */
     pj_grp_lock_acquire(tsx->grp_lock);
     tsx->transport_flag &= ~(TSX_HAS_PENDING_TRANSPORT);
+
+    if (sent > 0) {
+	/* Pending destroy? */
+	if (tsx->transport_flag & TSX_HAS_PENDING_DESTROY) {
+	    tsx_set_state( tsx, PJSIP_TSX_STATE_DESTROYED,
+			   PJSIP_EVENT_UNKNOWN, NULL, 0 );
+	    pj_grp_lock_release(tsx->grp_lock);
+	    return;
+	}
+
+	/* Need to transmit a message? */
+	if (tsx->transport_flag & TSX_HAS_PENDING_SEND) {
+	    tsx->transport_flag &= ~(TSX_HAS_PENDING_SEND);
+	    tsx_send_msg(tsx, tsx->last_tx);
+	}
+
+	/* Need to reschedule retransmission?
+	 * Note that when sending a pending message above, tsx_send_msg()
+	 * may set the flag TSX_HAS_PENDING_TRANSPORT.
+	 * Please refer to ticket #1875.
+	 */
+	if (tsx->transport_flag & TSX_HAS_PENDING_RESCHED &&
+	    !(tsx->transport_flag & TSX_HAS_PENDING_TRANSPORT))
+	{
+	    tsx->transport_flag &= ~(TSX_HAS_PENDING_RESCHED);
+
+	    /* Only update when transport turns out to be unreliable. */
+	    if (!tsx->is_reliable) {
+		tsx_resched_retransmission(tsx);
+	    }
+	}
+    }
     pj_grp_lock_release(tsx->grp_lock);
 
     if (sent < 0) {
@@ -2224,6 +2265,7 @@ static pj_status_t tsx_send_msg( pjsip_transaction *tsx,
 	if (status == PJ_EPENDING)
 	    status = PJ_SUCCESS;
 	if (status != PJ_SUCCESS) {
+	    tsx->transport_flag &= ~(TSX_HAS_PENDING_TRANSPORT);
 	    pj_grp_lock_dec_ref(tsx->grp_lock);
 	    pjsip_tx_data_dec_ref(tdata);
 	    tdata->mod_data[mod_tsx_layer.mod.id] = NULL;
@@ -2243,6 +2285,8 @@ static pj_status_t tsx_send_msg( pjsip_transaction *tsx,
 	if (status == PJ_EPENDING)
 	    status = PJ_SUCCESS;
 	if (status != PJ_SUCCESS) {
+	    tsx->transport_flag &= ~(TSX_HAS_PENDING_TRANSPORT);
+	    pj_grp_lock_dec_ref(tsx->grp_lock);
 	    pjsip_tx_data_dec_ref(tdata);
 	    tdata->mod_data[mod_tsx_layer.mod.id] = NULL;
 	    tsx->pending_tx = NULL;
@@ -2399,7 +2443,7 @@ static void tsx_update_transport( pjsip_transaction *tsx,
 	pjsip_transport_add_ref(tp);
 	pjsip_transport_add_state_listener(tp, &tsx_tp_state_callback, tsx,
 					    &tsx->tp_st_key);
-        if (tp->is_shutdown) {
+	if (tp->is_shutdown || tp->is_destroying) {
 	    pjsip_transport_state_info info;
 
 	    pj_bzero(&info, sizeof(info));
@@ -3261,10 +3305,11 @@ static pj_status_t tsx_on_state_completed_uas( pjsip_transaction *tsx,
 	}
 
     } else {
-	/* Ignore request to transmit. */
-	PJ_ASSERT_RETURN(event->type == PJSIP_EVENT_TX_MSG && 
-			 event->body.tx_msg.tdata == tsx->last_tx, 
+	PJ_ASSERT_RETURN(event->type == PJSIP_EVENT_TX_MSG, 
 			 PJ_EINVALIDOP);
+	/* Ignore request to transmit a new message. */
+	if (event->body.tx_msg.tdata != tsx->last_tx)
+	    return PJ_EINVALIDOP;
     }
 
     return PJ_SUCCESS;

@@ -313,13 +313,29 @@ static void inv_set_state(pjsip_inv_session *inv, pjsip_inv_state state,
     /* Mark the callback as called for this state */
     inv->cb_called |= (1 << state);
 
-    /* Call on_state_changed() callback. */
+    /* Call on_state_changed() callback.
+     * While in the callback, can the state shift to DISCONNECTED? Perhaps
+     * yes, so better avoid premature destroy of the invite session by
+     * temporarily increase its ref counter.
+     */
+    pjsip_inv_add_ref(inv);
     if (mod_inv.cb.on_state_changed && inv->notify && !dont_notify)
 	(*mod_inv.cb.on_state_changed)(inv, e);
+    pjsip_inv_dec_ref(inv);
 
-    /* Only decrement when previous state is not already DISCONNECTED */
-    if (inv->state == PJSIP_INV_STATE_DISCONNECTED &&
-	prev_state != PJSIP_INV_STATE_DISCONNECTED) 
+    /* The above callback may change the state, so we need to be careful here
+     * and only decrement inv under the following conditions:
+     * 1. If the state parameter is DISCONNECTED, and previous state is not
+     *    already DISCONNECTED.
+     *    This is to make sure that dec_ref() is not called more than once.
+     * 2. If current state is PJSIP_INV_STATE_DISCONNECTED.
+     *    This is to make sure that dec_ref() is not called if user restarts
+     *    inv within the callback. Note that this check must be last since
+     *    inv may have already been destroyed.
+     */
+    if (state == PJSIP_INV_STATE_DISCONNECTED &&
+	prev_state != PJSIP_INV_STATE_DISCONNECTED &&
+	inv->state == PJSIP_INV_STATE_DISCONNECTED) 
     {
 	pjsip_inv_dec_ref(inv);
     }
@@ -496,6 +512,13 @@ static pj_status_t inv_send_ack(pjsip_inv_session *inv, pjsip_event *e)
      */
     if (inv->state < PJSIP_INV_STATE_CONFIRMED) {
 	inv_set_state(inv, PJSIP_INV_STATE_CONFIRMED, &ack_e);
+    } else if (inv->state == PJSIP_INV_STATE_DISCONNECTED && inv->last_ack) {
+        /* Avoid possible leaked tdata when invite session is already
+         * destroyed.
+         * https://github.com/pjsip/pjproject/pull/2432
+         */
+        pjsip_tx_data_dec_ref(inv->last_ack);
+        inv->last_ack = NULL;
     }
 
     return PJ_SUCCESS;
@@ -804,7 +827,7 @@ PJ_DEF(pj_status_t) pjsip_inv_usage_init( pjsip_endpoint *endpt,
     PJ_ASSERT_RETURN(endpt && cb, PJ_EINVAL);
 
     /* Some callbacks are mandatory */
-    PJ_ASSERT_RETURN(cb->on_state_changed && cb->on_new_session, PJ_EINVAL);
+    PJ_ASSERT_RETURN(cb->on_state_changed, PJ_EINVAL);
 
     /* Check if module already registered. */
     PJ_ASSERT_RETURN(mod_inv.mod.id == -1, PJ_EINVALIDOP);
@@ -875,6 +898,8 @@ PJ_DEF(pj_status_t) pjsip_inv_create_uac( pjsip_dialog *dlg,
 	options |= PJSIP_INV_SUPPORT_100REL;
     if (options & PJSIP_INV_REQUIRE_TIMER)
 	options |= PJSIP_INV_SUPPORT_TIMER;
+    if (options & PJSIP_INV_REQUIRE_TRICKLE_ICE)
+	options |= PJSIP_INV_SUPPORT_TRICKLE_ICE;
 
     /* Create the session */
     inv = PJ_POOL_ZALLOC_T(dlg->pool, pjsip_inv_session);
@@ -940,7 +965,16 @@ PJ_DEF(pj_status_t) pjsip_inv_create_uac( pjsip_dialog *dlg,
     return PJ_SUCCESS;
 }
 
+
 PJ_DEF(pjsip_rdata_sdp_info*) pjsip_rdata_get_sdp_info(pjsip_rx_data *rdata)
+{
+    return pjsip_rdata_get_sdp_info2(rdata, NULL);
+}
+
+
+PJ_DEF(pjsip_rdata_sdp_info*) pjsip_rdata_get_sdp_info2(
+					    pjsip_rx_data *rdata,
+					    const pjsip_media_type *med_type)
 {
     pjsip_rdata_sdp_info *sdp_info;
     pjsip_msg_body *body = rdata->msg_info.msg->body;
@@ -957,7 +991,11 @@ PJ_DEF(pjsip_rdata_sdp_info*) pjsip_rdata_get_sdp_info(pjsip_rx_data *rdata)
     PJ_ASSERT_RETURN(mod_inv.mod.id >= 0, sdp_info);
     rdata->endpt_info.mod_data[mod_inv.mod.id] = sdp_info;
 
-    pjsip_media_type_init2(&app_sdp, "application", "sdp");
+    if (!med_type) {
+	pjsip_media_type_init2(&app_sdp, "application", "sdp");
+    } else {
+	pj_memcpy(&app_sdp, med_type, sizeof(app_sdp));
+    }
 
     if (body && ctype_hdr &&
 	pj_stricmp(&ctype_hdr->media.type, &app_sdp.type)==0 &&
@@ -1037,6 +1075,8 @@ PJ_DEF(pj_status_t) pjsip_inv_verify_request3(pjsip_rx_data *rdata,
 	*options |= PJSIP_INV_SUPPORT_TIMER;
     if (*options & PJSIP_INV_REQUIRE_ICE)
 	*options |= PJSIP_INV_SUPPORT_ICE;
+    if (*options & PJSIP_INV_REQUIRE_TRICKLE_ICE)
+	*options |= PJSIP_INV_SUPPORT_TRICKLE_ICE;
 
     if (rdata) {
         /* Get the message in rdata */
@@ -1263,6 +1303,7 @@ PJ_DEF(pj_status_t) pjsip_inv_verify_request3(pjsip_rx_data *rdata,
 	const pj_str_t STR_100REL = { "100rel", 6};
 	const pj_str_t STR_TIMER = { "timer", 5};
 	const pj_str_t STR_ICE = { "ice", 3 };
+	const pj_str_t STR_TRICKLE_ICE = { "trickle-ice", 11 };
 
 	for (i=0; i<sup_hdr->count; ++i) {
 	    if (pj_stricmp(&sup_hdr->values[i], &STR_100REL)==0)
@@ -1271,6 +1312,8 @@ PJ_DEF(pj_status_t) pjsip_inv_verify_request3(pjsip_rx_data *rdata,
 		rem_option |= PJSIP_INV_SUPPORT_TIMER;
 	    else if (pj_stricmp(&sup_hdr->values[i], &STR_ICE)==0)
 		rem_option |= PJSIP_INV_SUPPORT_ICE;
+	    else if (pj_stricmp(&sup_hdr->values[i], &STR_TRICKLE_ICE)==0)
+		rem_option |= PJSIP_INV_SUPPORT_TRICKLE_ICE;
 	}
     }
 
@@ -1285,6 +1328,7 @@ PJ_DEF(pj_status_t) pjsip_inv_verify_request3(pjsip_rx_data *rdata,
 	const pj_str_t STR_REPLACES = { "replaces", 8 };
 	const pj_str_t STR_TIMER = { "timer", 5 };
 	const pj_str_t STR_ICE = { "ice", 3 };
+	const pj_str_t STR_TRICKLE_ICE = { "trickle-ice", 11 };
 	unsigned unsupp_cnt = 0;
 	pj_str_t unsupp_tags[PJSIP_GENERIC_ARRAY_MAX_COUNT];
 	
@@ -1310,6 +1354,11 @@ PJ_DEF(pj_status_t) pjsip_inv_verify_request3(pjsip_rx_data *rdata,
 		pj_stricmp(&req_hdr->values[i], &STR_ICE)==0)
 	    {
 		rem_option |= PJSIP_INV_REQUIRE_ICE;
+
+	    } else if ((*options & PJSIP_INV_SUPPORT_TRICKLE_ICE) &&
+		pj_stricmp(&req_hdr->values[i], &STR_TRICKLE_ICE)==0)
+	    {
+		rem_option |= PJSIP_INV_REQUIRE_TRICKLE_ICE;
 
 	    } else if (!pjsip_endpt_has_capability(endpt, PJSIP_H_SUPPORTED,
 						   NULL, &req_hdr->values[i]))
@@ -1358,9 +1407,11 @@ PJ_DEF(pj_status_t) pjsip_inv_verify_request3(pjsip_rx_data *rdata,
      * by peer.
      */
     if ( msg && (((*options & PJSIP_INV_REQUIRE_100REL)!=0 && 
-	  (rem_option & PJSIP_INV_SUPPORT_100REL)==0) ||
-	 ((*options & PJSIP_INV_REQUIRE_TIMER)!=0 && 
-	  (rem_option & PJSIP_INV_SUPPORT_TIMER)==0)))
+                  (rem_option & PJSIP_INV_SUPPORT_100REL)==0) ||
+                 ((*options & PJSIP_INV_REQUIRE_TIMER)!=0 && 
+                  (rem_option & PJSIP_INV_SUPPORT_TIMER)==0) ||
+                 ((*options & PJSIP_INV_REQUIRE_TRICKLE_ICE)!=0 && 
+                  (rem_option & PJSIP_INV_SUPPORT_TRICKLE_ICE)==0)))
     {
 	code = PJSIP_SC_EXTENSION_REQUIRED;
 	status = PJSIP_ERRNO_FROM_SIP_STATUS(code);
@@ -1376,6 +1427,8 @@ PJ_DEF(pj_status_t) pjsip_inv_verify_request3(pjsip_rx_data *rdata,
 		req_hdr->values[req_hdr->count++] = pj_str("100rel");
 	    if (*options & PJSIP_INV_REQUIRE_TIMER)
 		req_hdr->values[req_hdr->count++] = pj_str("timer");
+	    if (*options & PJSIP_INV_REQUIRE_TRICKLE_ICE)
+		req_hdr->values[req_hdr->count++] = pj_str("trickle-ice");
 
 	    pj_list_push_back(&res_hdr_list, req_hdr);
 
@@ -1404,6 +1457,10 @@ PJ_DEF(pj_status_t) pjsip_inv_verify_request3(pjsip_rx_data *rdata,
     if (rem_option & PJSIP_INV_REQUIRE_TIMER) {
 	    pj_assert(*options & PJSIP_INV_SUPPORT_TIMER);
 	    *options |= PJSIP_INV_REQUIRE_TIMER;
+    }
+    if (rem_option & PJSIP_INV_REQUIRE_TRICKLE_ICE) {
+	    pj_assert(*options & PJSIP_INV_SUPPORT_TRICKLE_ICE);
+	    *options |= PJSIP_INV_REQUIRE_TRICKLE_ICE;
     }
 
 on_return:
@@ -1766,7 +1823,8 @@ static void cleanup_allow_sup_hdr(unsigned inv_option,
 {
     /* If all extensions are enabled, nothing to do */
     if ((inv_option & PJSIP_INV_SUPPORT_100REL) &&
-	(inv_option & PJSIP_INV_SUPPORT_TIMER))
+	(inv_option & PJSIP_INV_SUPPORT_TIMER) &&
+	(inv_option & PJSIP_INV_SUPPORT_TRICKLE_ICE))
     {
 	return;
     }
@@ -1788,6 +1846,11 @@ static void cleanup_allow_sup_hdr(unsigned inv_option,
     if ((inv_option & PJSIP_INV_SUPPORT_TIMER) == 0 && sup_hdr) {
 	const pj_str_t STR_TIMER = { "timer", 5 };
 	remove_val_from_array_hdr(sup_hdr, &STR_TIMER);
+    }
+
+    if ((inv_option & PJSIP_INV_SUPPORT_TRICKLE_ICE) == 0 && sup_hdr) {
+	const pj_str_t STR_TRICKLE_ICE = { "trickle-ice", 11 };
+	remove_val_from_array_hdr(sup_hdr, &STR_TRICKLE_ICE);
     }
 
     if ((inv_option & PJSIP_INV_SUPPORT_100REL) == 0) {
@@ -1897,7 +1960,8 @@ PJ_DEF(pj_status_t) pjsip_inv_invite( pjsip_inv_session *inv,
 
     /* Add Require header. */
     if ((inv->options & PJSIP_INV_REQUIRE_100REL) ||
-	(inv->options & PJSIP_INV_REQUIRE_TIMER)) 
+	(inv->options & PJSIP_INV_REQUIRE_TIMER) ||
+	(inv->options & PJSIP_INV_REQUIRE_TRICKLE_ICE))
     {
 	pjsip_require_hdr *hreq;
 
@@ -1907,6 +1971,8 @@ PJ_DEF(pj_status_t) pjsip_inv_invite( pjsip_inv_session *inv,
 	    hreq->values[hreq->count++] = pj_str("100rel");
 	if (inv->options & PJSIP_INV_REQUIRE_TIMER)
 	    hreq->values[hreq->count++] = pj_str("timer");
+	if (inv->options & PJSIP_INV_REQUIRE_TRICKLE_ICE)
+	    hreq->values[hreq->count++] = pj_str("trickle-ice");
 
 	pjsip_msg_add_hdr(tdata->msg, (pjsip_hdr*) hreq);
     }
@@ -2054,6 +2120,15 @@ static pj_status_t inv_check_sdp_in_incoming_msg( pjsip_inv_session *inv,
 	   )
 	{
 	    const pjmedia_sdp_session *reoffer_sdp = NULL;
+
+	    if (pjmedia_sdp_neg_get_state(inv->neg) !=
+	    	PJMEDIA_SDP_NEG_STATE_DONE)
+	    {
+	    	PJ_LOG(4,(inv->obj_name, "SDP negotiation in progress, "
+	    		  "message body in %s response is ignored",
+		          (st_code/10==18? "early" : "final" )));
+	    	return PJ_SUCCESS;
+	    }
 
 	    PJ_LOG(4,(inv->obj_name, "Received %s response "
 		      "after SDP negotiation has been done in early "
@@ -2416,14 +2491,13 @@ PJ_DEF(pj_status_t) pjsip_inv_answer(	pjsip_inv_session *inv,
     status = pjsip_tx_data_clone(inv->last_answer, 0, &last_res);
     if (status != PJ_SUCCESS)
 	goto on_return;
-    old_res = inv->last_answer;
-    inv->last_answer = last_res;
-    pjsip_tx_data_dec_ref(old_res);
 
     /* Modify last response. */
     status = pjsip_dlg_modify_response(inv->dlg, last_res, st_code, st_text);
-    if (status != PJ_SUCCESS)
+    if (status != PJ_SUCCESS) {
+	pjsip_tx_data_dec_ref(last_res);
 	goto on_return;
+    }
 
     /* For non-2xx final response, strip message body */
     if (st_code >= 300) {
@@ -2442,6 +2516,13 @@ PJ_DEF(pj_status_t) pjsip_inv_answer(	pjsip_inv_session *inv,
 
     /* Cleanup Allow & Supported headers from disabled extensions */
     cleanup_allow_sup_hdr(inv->options, last_res, NULL, NULL);
+
+    /* Update last_answer */
+    old_res = inv->last_answer;
+    inv->last_answer = last_res;
+
+    /* Release old answer */
+    pjsip_tx_data_dec_ref(old_res);
 
     *p_tdata = last_res;
 
@@ -3249,6 +3330,33 @@ PJ_DEF(pj_status_t) pjsip_inv_send_msg( pjsip_inv_session *inv,
 					tsx_inv_data);
 	if (status != PJ_SUCCESS) {
 	    goto on_error;
+	}
+
+	/* Check if this is delayed manual ACK (see #416) */
+	if (mod_inv.cb.on_send_ack &&
+	    tdata->msg->line.req.method.id == PJSIP_ACK_METHOD &&
+	    tdata == inv->last_ack)
+	{
+	    pjsip_dlg_inc_lock(inv->dlg);
+
+	    /* Set state to CONFIRMED (if we're not in CONFIRMED yet).
+	     * But don't set it to CONFIRMED if we're already DISCONNECTED
+	     * (this may have been a late 200/OK response.
+	     */
+	    if (inv->state < PJSIP_INV_STATE_CONFIRMED) {
+		pjsip_event ack_e;
+		PJSIP_EVENT_INIT_TX_MSG(ack_e, inv->last_ack);
+		inv_set_state(inv, PJSIP_INV_STATE_CONFIRMED, &ack_e);
+	    } else if (inv->state == PJSIP_INV_STATE_DISCONNECTED) {
+		/* Avoid possible leaked tdata when invite session is
+		 * already destroyed.
+		 * https://github.com/pjsip/pjproject/pull/2432
+		 */
+		pjsip_tx_data_dec_ref(inv->last_ack);
+		inv->last_ack = NULL;
+	    }
+
+	    pjsip_dlg_dec_lock(inv->dlg);
 	}
 
     } else {

@@ -548,6 +548,9 @@ public:
      * Callbacks
      */
 
+
+/* Unfortunately for pjsua2, a hard deprecation is inevitable. */
+#if 0 // !DEPRECATED_FOR_TICKET_2251
     /**
      * Register a callback to be called when the file player reading has
      * reached the end of file, or when the file reading has reached the
@@ -562,7 +565,21 @@ public:
      */
     virtual bool onEof()
     { return true; }
+#endif
 
+    /**
+     * Register a callback to be called when the file player reading has
+     * reached the end of file, or when the file reading has reached the
+     * end of file of the last file for a playlist. If the file or playlist
+     * is set to play repeatedly, then the callback will be called multiple
+     * times.
+     *
+     * If application wishes to stop the playback, it can stop the media
+     * transmission in the callback, and only after all transmissions have
+     * been stopped, could the application safely destroy the player.
+     */
+    virtual void onEof2()
+    { }
 
 private:
     /**
@@ -573,8 +590,8 @@ private:
     /**
      *  Low level PJMEDIA callback
      */
-    static pj_status_t eof_cb(pjmedia_port *port,
-                              void *usr_data);
+    static void eof_cb(pjmedia_port *port,
+                       void *usr_data);
 };
 
 /**
@@ -949,7 +966,8 @@ public:
     MediaPort *setNoDev();
 
     /**
-     * Set sound device mode.
+     * Set sound device mode. Note that calling the APIs to set sound device
+     * (setPlaybackDev()/setCaptureDev()) will reset the mode.
      * 
      * @param mode		The sound device mode, as bitmask combination 
      *				of #pjsua_snd_dev_mode
@@ -1851,7 +1869,17 @@ public:
      * @param win		The new output window.
      */
     void setWindow(const VideoWindowHandle &win) PJSUA2_THROW(Error);
-    
+
+    /**
+     * Set video window full-screen. This operation is valid only when the
+     * underlying video device supports PJMEDIA_VID_DEV_CAP_OUTPUT_FULLSCREEN
+     * capability. Currently it is only supported on SDL backend.
+     *
+     * @param enabled   	Set to true if full screen is desired, false
+     *				otherwise.
+     */
+    void setFullScreen(bool enabled) PJSUA2_THROW(Error);
+
 private:
     pjsua_vid_win_id		winId;
 };
@@ -1960,6 +1988,8 @@ public:
 
 private:
     pjmedia_vid_dev_index devId;
+    pjsua_vid_win_id winId;
+    void updateDevId();
 };
 
 /**
@@ -2411,6 +2441,23 @@ struct CodecParam
     void fromPj(const pjmedia_codec_param &param);
 
     pjmedia_codec_param toPj() const;
+};
+
+/**
+ * Opus codec parameters setting;
+ */
+struct CodecOpusConfig
+{
+    unsigned   sample_rate; /**< Sample rate in Hz.                     */
+    unsigned   channel_cnt; /**< Number of channels.                    */
+    unsigned   frm_ptime;   /**< Frame time in msec.   			*/
+    unsigned   bit_rate;    /**< Encoder bit rate in bps.		*/
+    unsigned   packet_loss; /**< Encoder's expected packet loss pct.	*/
+    unsigned   complexity;  /**< Encoder complexity, 0-10(10 is highest)*/
+    bool       cbr;         /**< Constant bit rate?			*/
+
+    pjmedia_codec_opus_config toPj() const;
+    void fromPj(const pjmedia_codec_opus_config &config);
 };
 
 /**

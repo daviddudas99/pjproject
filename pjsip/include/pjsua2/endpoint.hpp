@@ -807,7 +807,9 @@ public:
     unsigned		rxDropPct;
 
     /**
-     * Echo canceller options (see pjmedia_echo_create())
+     * Echo canceller options (see pjmedia_echo_create()).
+     * Specify PJMEDIA_ECHO_USE_SW_ECHO here if application wishes
+     * to use software echo canceller instead of device EC.
      *
      * Default: 0.
      */
@@ -863,6 +865,14 @@ public:
      * Default: -1 (to use default stream settings, currently 360 msec)
      */
     int			jbMax;
+
+    /**
+     * Set the algorithm the jitter buffer uses to discard frames in order to
+     * adjust the latency.
+     *
+     * Default: PJMEDIA_JB_DISCARD_PROGRESSIVE
+     */
+    pjmedia_jb_discard_algo jbDiscardAlgo;
 
     /**
      * Specify idle time of sound device before it is automatically closed,
@@ -1097,6 +1107,11 @@ public:
 
     /**
      * Write a log entry.
+     * Application must implement its own custom LogWriter and
+     * this function will then call the LogWriter::write() method.
+     * Note that this function does not call PJSIP's internal
+     * logging functionality. For that, you should use
+     * utilLogWrite(prmLevel, prmSender, prmMsg) above.
      *
      * @param e			The log entry.
      */
@@ -1547,6 +1562,23 @@ public:
      */
     void resetVideoCodecParam(const string &codec_id) PJSUA2_THROW(Error);
 
+#if defined(PJMEDIA_HAS_OPUS_CODEC) && (PJMEDIA_HAS_OPUS_CODEC!=0)
+    /**
+     * Get codec Opus config.
+     *
+     */
+     CodecOpusConfig getCodecOpusConfig() const PJSUA2_THROW(Error);
+
+    /**
+     * Set codec Opus config.
+     *
+     * @param opus_cfg	Codec Opus configuration.
+     *
+     */
+    void setCodecOpusConfig(const CodecOpusConfig &opus_cfg)
+			    PJSUA2_THROW(Error);
+#endif
+
     /**
      * Enumerate all SRTP crypto-suite names.
      *
@@ -1763,6 +1795,8 @@ private:
                                     pjmedia_sdp_session *sdp,
                                     pj_pool_t *pool,
                                     const pjmedia_sdp_session *rem_sdp);
+    static void on_stream_precreate(pjsua_call_id call_id,
+                                    pjsua_on_stream_precreate_param *param);
     static void on_stream_created2(pjsua_call_id call_id,
 				   pjsua_on_stream_created_param *param);
     static void on_stream_destroyed(pjsua_call_id call_id,
@@ -1771,6 +1805,8 @@ private:
     static void on_dtmf_digit(pjsua_call_id call_id, int digit);
     static void on_dtmf_digit2(pjsua_call_id call_id, 
 			       const pjsua_dtmf_info *info);
+    static void on_dtmf_event(pjsua_call_id call_id,
+                              const pjsua_dtmf_event *event);
     static void on_call_transfer_request(pjsua_call_id call_id,
                                          const pj_str_t *dst,
                                          pjsip_status_code *code);

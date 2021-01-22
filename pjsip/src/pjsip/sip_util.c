@@ -779,13 +779,13 @@ PJ_DEF(pj_status_t) pjsip_endpt_create_cancel( pjsip_endpoint *endpt,
 	    pjsip_hdr_clone(cancel_tdata->pool, req_tdata->saved_strict_route);
     }
 
-    /* Copy the destination host name from the original request */
-    pj_strdup(cancel_tdata->pool, &cancel_tdata->dest_info.name,
-	      &req_tdata->dest_info.name);
-
-    /* Finally copy the destination info from the original request */
+    /* Copy the destination info from the original request */
     pj_memcpy(&cancel_tdata->dest_info, &req_tdata->dest_info,
 	      sizeof(req_tdata->dest_info));
+
+    /* Finally, copy the destination host name from the original request */
+    pj_strdup(cancel_tdata->pool, &cancel_tdata->dest_info.name,
+	      &req_tdata->dest_info.name);
 
     /* Done.
      * Return the transmit buffer containing the CANCEL request.
@@ -1102,6 +1102,7 @@ static void stateless_send_transport_cb( void *token,
 					 pj_ssize_t sent )
 {
     pjsip_send_state *stateless_data = (pjsip_send_state*) token;
+    pj_status_t need_update_via = PJ_TRUE;
 
     PJ_UNUSED_ARG(tdata);
     pj_assert(tdata == stateless_data->tdata);
@@ -1201,6 +1202,15 @@ static void stateless_send_transport_cb( void *token,
 	    pjsip_msg_insert_first_hdr(tdata->msg, (pjsip_hdr*)via);
 	}
 
+	if (tdata->msg->line.req.method.id == PJSIP_CANCEL_METHOD) {
+	    if (via->sent_by.host.slen > 0) {
+		/* Don't update Via header on a CANCEL request if the sent-by
+		 * parameter is already set since it needs to match the 
+		 * original request. */
+		need_update_via = PJ_FALSE;
+	    }
+	}
+
 	if (via->branch_param.slen == 0) {
 	    pj_str_t tmp;
 	    via->branch_param.ptr = (char*)pj_pool_alloc(tdata->pool,
@@ -1213,10 +1223,7 @@ static void stateless_send_transport_cb( void *token,
 	    pj_generate_unique_string(&tmp);
 	}
 
-	/* For CANCEL request, do not update the Via header since it needs
-	 * to match the original request.
-	 */
-	if (tdata->msg->line.req.method.id != PJSIP_CANCEL_METHOD) {
+	if (need_update_via) {
 	    via->transport = pj_str(stateless_data->cur_transport->type_name);
 
 	    if (tdata->via_addr.host.slen > 0 &&

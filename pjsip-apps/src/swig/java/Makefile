@@ -1,6 +1,14 @@
 include ../../../../build.mak
 include ../../../../build/common.mak
 
+SWIG_FLAGS=-I../../../../pjlib/include \
+		   -I../../../../pjlib-util/include \
+		   -I../../../../pjmedia/include \
+		   -I../../../../pjsip/include \
+		   -I../../../../pjnath/include -c++ 
+SRC_DIR=../../../../pjsip/include
+SRCS=$(SRC_DIR)/pjsua2/endpoint.hpp $(SRC_DIR)/pjsua2/types.hpp
+
 ifneq ($(findstring android,$(TARGET_NAME)),)
  OS=android
  ifeq ("$(JAVA_HOME)","")
@@ -163,9 +171,11 @@ all: $(LIBPJSUA2_SO) java
 $(LIBPJSUA2_SO): $(OUT_DIR)/pjsua2_wrap.o
 ifeq ($(OS),android)
 	mkdir -p android/app/src/main/jniLibs/$(TARGET_ARCH)
+	# copy libc++_shared.so manually
+	cp -f ${ANDROID_NDK_ROOT}/sources/cxx-stl/llvm-libc++/libs/${TARGET_ARCH}/libc++_shared.so android/app/src/main/jniLibs/$(TARGET_ARCH)
 endif
 	$(PJ_CXX) -shared -o $(LIBPJSUA2_SO) $(OUT_DIR)/pjsua2_wrap.o \
-		$(MY_CFLAGS) $(MY_LDFLAGS)
+		$(MY_LDFLAGS)
 
 $(OUT_DIR)/pjsua2_wrap.o: $(OUT_DIR)/pjsua2_wrap.cpp Makefile
 	$(PJ_CXX) -c $(OUT_DIR)/pjsua2_wrap.cpp -o $(OUT_DIR)/pjsua2_wrap.o \

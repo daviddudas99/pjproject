@@ -906,7 +906,7 @@ static pj_status_t process_m_answer( pj_pool_t *pool,
  * after receiving remote answer.
  */
 static pj_status_t process_answer(pj_pool_t *pool,
-				  pjmedia_sdp_session *offer,
+				  pjmedia_sdp_session *local_offer,
 				  pjmedia_sdp_session *answer,
 				  pj_bool_t allow_asym,
 				  pjmedia_sdp_session **p_active)
@@ -914,10 +914,14 @@ static pj_status_t process_answer(pj_pool_t *pool,
     unsigned omi = 0; /* Offer media index */
     unsigned ami = 0; /* Answer media index */
     pj_bool_t has_active = PJ_FALSE;
+    pjmedia_sdp_session *offer;
     pj_status_t status;
 
     /* Check arguments. */
-    PJ_ASSERT_RETURN(pool && offer && answer && p_active, PJ_EINVAL);
+    PJ_ASSERT_RETURN(pool && local_offer && answer && p_active, PJ_EINVAL);
+
+    /* Duplicate local offer SDP. */
+    offer = pjmedia_sdp_session_clone(pool, local_offer);
 
     /* Check that media count match between offer and answer */
     // Ticket #527, different media count is allowed for more interoperability,
@@ -1070,6 +1074,8 @@ static pj_status_t match_offer(pj_pool_t *pool,
     pj_str_t pt_offer[PJMEDIA_MAX_SDP_FMT];
     pjmedia_sdp_media *answer;
     const pjmedia_sdp_media *master, *slave;
+    unsigned nclockrate = 0, clockrate[PJMEDIA_MAX_SDP_FMT];
+    unsigned ntel_clockrate = 0, tel_clockrate[PJMEDIA_MAX_SDP_FMT];
 
     /* If offer has zero port, just clone the offer */
     if (offer->desc.port == 0) {
@@ -1130,9 +1136,20 @@ static pj_status_t match_offer(pj_pool_t *pool,
 		    unsigned p;
 		    p = pj_strtoul(&slave->desc.fmt[j]);
 		    if (p == pt && pj_isdigit(*slave->desc.fmt[j].ptr)) {
+			unsigned k;
+
 			found_matching_codec = 1;
 			pt_offer[pt_answer_count] = slave->desc.fmt[j];
 			pt_answer[pt_answer_count++] = slave->desc.fmt[j];
+
+			/* Take note of clock rate for tel-event. Note: for
+			 * static PT, we assume the clock rate is 8000.
+			 */
+			for (k=0; k<nclockrate; ++k)
+			    if (clockrate[k] == 8000)
+				break;
+			if (k == nclockrate)
+			    clockrate[nclockrate++] = 8000;
 			break;
 		    }
 		}
@@ -1144,7 +1161,7 @@ static pj_status_t match_offer(pj_pool_t *pool,
 		 */
 		const pjmedia_sdp_attr *a;
 		pjmedia_sdp_rtpmap or_;
-		pj_bool_t is_codec;
+		pj_bool_t is_codec = 0;
 
 		/* Get the rtpmap for the payload type in the master. */
 		a = pjmedia_sdp_media_find_attr2(master, "rtpmap", 
@@ -1155,11 +1172,7 @@ static pj_status_t match_offer(pj_pool_t *pool,
 		}
 		pjmedia_sdp_attr_get_rtpmap(a, &or_);
 
-		if (!pj_stricmp2(&or_.enc_name, "telephone-event")) {
-		    if (found_matching_telephone_event)
-			continue;
-		    is_codec = 0;
-		} else {
+		if (pj_stricmp2(&or_.enc_name, "telephone-event")) {
 		    master_has_codec = 1;
 		    if (!answer_with_multiple_codecs && found_matching_codec)
 			continue;
@@ -1191,6 +1204,7 @@ static pj_status_t match_offer(pj_pool_t *pool,
 			    if (is_codec) {
 				pjmedia_sdp_media *o_med, *a_med;
 				unsigned o_fmt_idx, a_fmt_idx;
+				unsigned k;
 
 				o_med = (pjmedia_sdp_media*)offer;
 				a_med = (pjmedia_sdp_media*)preanswer;
@@ -1207,7 +1221,26 @@ static pj_status_t match_offer(pj_pool_t *pool,
 				    continue;
 				}
 				found_matching_codec = 1;
+
+				/* Take note of clock rate for tel-event */
+				for (k=0; k<nclockrate; ++k)
+				    if (clockrate[k] == or_.clock_rate)
+					break;
+				if (k == nclockrate)
+				    clockrate[nclockrate++] = or_.clock_rate;
 			    } else {
+			    	unsigned k;
+
+				/* Keep track of tel-event clock rate,
+				 * to prevent duplicate.
+				 */
+				for (k=0; k<ntel_clockrate; ++k)
+				    if (tel_clockrate[k] == or_.clock_rate)
+					break;
+				if (k < ntel_clockrate)
+				    continue;
+				
+				tel_clockrate[ntel_clockrate++] = or_.clock_rate;
 				found_matching_telephone_event = 1;
 			    }
 
@@ -1269,8 +1302,71 @@ static pj_status_t match_offer(pj_pool_t *pool,
 	return PJMEDIA_SDPNEG_NOANSUNKNOWN;
     }
 
-    /* Seems like everything is in order.
-     * Build the answer by cloning from preanswer, but rearrange the payload
+    /* Seems like everything is in order. */
+
+    /* Remove unwanted telephone-event formats. */
+    if (found_matching_telephone_event) {
+	pj_str_t first_televent_offer = {0};
+	pj_str_t first_televent_answer = {0};
+	unsigned matched_cnt = 0;
+
+	for (i=0; i<pt_answer_count; ) {
+	    const pjmedia_sdp_attr *a;
+	    pjmedia_sdp_rtpmap r;
+	    unsigned j;
+
+	    /* Skip static PT, as telephone-event uses dynamic PT */
+	    if (!pj_isdigit(*pt_answer[i].ptr) || pj_strtol(&pt_answer[i])<96)
+	    {
+		++i;
+		continue;
+	    }
+
+	    /* Get the rtpmap for format. */
+	    a = pjmedia_sdp_media_find_attr2(preanswer, "rtpmap",
+					     &pt_answer[i]);
+	    pj_assert(a);
+	    pjmedia_sdp_attr_get_rtpmap(a, &r);
+
+	    /* Only care for telephone-event format */
+	    if (pj_stricmp2(&r.enc_name, "telephone-event")) {
+		++i;
+		continue;
+	    }
+
+	    if (first_televent_offer.slen == 0) {
+		first_televent_offer = pt_offer[i];
+		first_televent_answer = pt_answer[i];
+	    }
+
+	    for (j=0; j<nclockrate; ++j) {
+		if (r.clock_rate==clockrate[j])
+		    break;
+	    }
+
+	    /* This tel-event's clockrate is unwanted, remove the tel-event */
+	    if (j==nclockrate) {
+		pj_array_erase(pt_answer, sizeof(pt_answer[0]),
+			       pt_answer_count, i);
+		pj_array_erase(pt_offer, sizeof(pt_offer[0]),
+			       pt_answer_count, i);
+		pt_answer_count--;
+	    } else {
+		++matched_cnt;
+		++i;
+	    }
+	}
+
+	/* Tel-event is wanted, but no matched clock rate (to the selected
+	 * audio codec), just put back any first matched tel-event formats.
+	 */
+	if (!matched_cnt) {
+	    pt_offer[pt_answer_count] = first_televent_offer;
+	    pt_answer[pt_answer_count++] = first_televent_answer;
+	}
+    }
+
+    /* Build the answer by cloning from preanswer, and reorder the payload
      * to suit the offer.
      */
     answer = pjmedia_sdp_media_clone(pool, preanswer);
