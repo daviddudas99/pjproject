@@ -46,7 +46,7 @@ static struct py_thread_desc
 static PyObj_pjsua_callback * g_obj_callback;
 
 /* Set this to 1 if all threads are created by Python */
-#define NO_PJSIP_THREAD 0
+#define NO_PJSIP_THREAD 1
 
 #if NO_PJSIP_THREAD
 #   define ENTER_PYTHON()
