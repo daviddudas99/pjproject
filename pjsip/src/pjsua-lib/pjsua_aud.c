@@ -534,7 +534,9 @@ void pjsua_aud_stop_stream(pjsua_call_media *call_med)
 	    call_med->rtp_tx_ts = stat.rtp_tx_last_ts;
 	}
 
-	if (pjsua_var.ua_cfg.cb.on_stream_destroyed) {
+	if (!call_med->call->hanging_up &&
+	    pjsua_var.ua_cfg.cb.on_stream_destroyed)
+	{
 	    pjsua_var.ua_cfg.cb.on_stream_destroyed(call_med->call->index,
 	                                            strm, call_med->idx);
 	}
@@ -558,15 +560,19 @@ void pjsua_aud_stop_stream(pjsua_call_media *call_med)
 static void dtmf_callback(pjmedia_stream *strm, void *user_data,
 			  int digit)
 {
+    pjsua_call_id call_id;
+
     PJ_UNUSED_ARG(strm);
+
+    call_id = (pjsua_call_id)(pj_ssize_t)user_data;
+    if (pjsua_var.calls[call_id].hanging_up)
+    	return;
 
     pj_log_push_indent();
 
     if (pjsua_var.ua_cfg.cb.on_dtmf_digit2) {
-	pjsua_call_id call_id;
 	pjsua_dtmf_info info;
 
-	call_id = (pjsua_call_id)(pj_ssize_t)user_data;
 	info.method = PJSUA_DTMF_METHOD_RFC2833;
 	info.digit = digit;
         info.duration = PJSUA_UNKNOWN_DTMF_DURATION;
@@ -576,9 +582,6 @@ static void dtmf_callback(pjmedia_stream *strm, void *user_data,
 	 * callback, please see ticket #460:
 	 *	http://trac.pjsip.org/repos/ticket/460#comment:4
 	 */    
-	pjsua_call_id call_id;
-
-	call_id = (pjsua_call_id)(pj_ssize_t)user_data;
 	(*pjsua_var.ua_cfg.cb.on_dtmf_digit)(call_id, digit);
     }
 
@@ -596,10 +599,13 @@ static void dtmf_event_callback(pjmedia_stream *strm, void *user_data,
 
     PJ_UNUSED_ARG(strm);
 
+    call_id = (pjsua_call_id)(pj_ssize_t)user_data;
+    if (pjsua_var.calls[call_id].hanging_up)
+    	return;
+
     pj_log_push_indent();
 
     if (pjsua_var.ua_cfg.cb.on_dtmf_event) {
-        call_id = (pjsua_call_id)(pj_ssize_t)user_data;
         evt.method = PJSUA_DTMF_METHOD_RFC2833;
         evt.timestamp = event->timestamp;
         evt.digit = event->digit;
@@ -646,6 +652,7 @@ pj_status_t pjsua_aud_channel_update(pjsua_call_media *call_med,
 	si->jb_min_pre = pjsua_var.media_cfg.jb_min_pre;
 	si->jb_max_pre = pjsua_var.media_cfg.jb_max_pre;
 	si->jb_max = pjsua_var.media_cfg.jb_max;
+        si->jb_discard_algo = pjsua_var.media_cfg.jb_discard_algo;
 
 	/* Set SSRC and CNAME */
 	si->ssrc = call_med->ssrc;
@@ -663,7 +670,28 @@ pj_status_t pjsua_aud_channel_update(pjsua_call_media *call_med,
 #if defined(PJMEDIA_STREAM_ENABLE_KA) && PJMEDIA_STREAM_ENABLE_KA!=0
 	/* Enable/disable stream keep-alive and NAT hole punch. */
 	si->use_ka = pjsua_var.acc[call->acc_id].cfg.use_stream_ka;
+
+        si->ka_cfg = pjsua_var.acc[call->acc_id].cfg.stream_ka_cfg;
 #endif
+
+        if (!call->hanging_up && pjsua_var.ua_cfg.cb.on_stream_precreate) {
+            pjsua_on_stream_precreate_param prm;
+            prm.stream_idx = strm_idx;
+            prm.stream_info.type = PJMEDIA_TYPE_AUDIO;
+            prm.stream_info.info.aud = *si;
+            (*pjsua_var.ua_cfg.cb.on_stream_precreate)(call->index, &prm);
+
+            /* Copy back only the fields which are allowed to be changed. */
+            si->jb_init = prm.stream_info.info.aud.jb_init;
+            si->jb_min_pre = prm.stream_info.info.aud.jb_min_pre;
+            si->jb_max_pre = prm.stream_info.info.aud.jb_max_pre;
+            si->jb_max = prm.stream_info.info.aud.jb_max;
+            si->jb_discard_algo = prm.stream_info.info.aud.jb_discard_algo;
+#if defined(PJMEDIA_STREAM_ENABLE_KA) && (PJMEDIA_STREAM_ENABLE_KA != 0)
+            si->use_ka = prm.stream_info.info.aud.use_ka;
+#endif
+            si->rtcp_sdes_bye_disabled = prm.stream_info.info.aud.rtcp_sdes_bye_disabled;
+        }
 
 	/* Create session based on session info. */
 	status = pjmedia_stream_create(pjsua_var.med_endpt, NULL, si,
@@ -685,12 +713,13 @@ pj_status_t pjsua_aud_channel_update(pjsua_call_media *call_med,
 	/* If DTMF callback is installed by application, install our
 	 * callback to the session.
 	 */
-        if (pjsua_var.ua_cfg.cb.on_dtmf_event) {
+        if (!call->hanging_up && pjsua_var.ua_cfg.cb.on_dtmf_event) {
             pjmedia_stream_set_dtmf_event_callback(call_med->strm.a.stream,
                                               &dtmf_event_callback,
                                               (void*)(pj_ssize_t)(call->index));
-        } else if (pjsua_var.ua_cfg.cb.on_dtmf_digit || 
-	           pjsua_var.ua_cfg.cb.on_dtmf_digit2) 
+        } else if (!call->hanging_up &&
+        	   (pjsua_var.ua_cfg.cb.on_dtmf_digit || 
+	            pjsua_var.ua_cfg.cb.on_dtmf_digit2))
 	{
 	    pjmedia_stream_set_dtmf_callback(call_med->strm.a.stream,
 					     &dtmf_callback,
@@ -707,7 +736,7 @@ pj_status_t pjsua_aud_channel_update(pjsua_call_media *call_med,
 	 * Note: application may modify media_port to point to different
 	 * media port
 	 */
-	if (pjsua_var.ua_cfg.cb.on_stream_created2) {
+	if (!call->hanging_up && pjsua_var.ua_cfg.cb.on_stream_created2) {
 	    pjsua_on_stream_created_param prm;
 	    
 	    prm.stream = call_med->strm.a.stream;
@@ -719,7 +748,8 @@ pj_status_t pjsua_aud_channel_update(pjsua_call_media *call_med,
 	    call_med->strm.a.destroy_port = prm.destroy_port;
 	    call_med->strm.a.media_port = prm.port;
 
-	} else if (pjsua_var.ua_cfg.cb.on_stream_created) {
+	} else if (!call->hanging_up && pjsua_var.ua_cfg.cb.on_stream_created)
+	{
 	    (*pjsua_var.ua_cfg.cb.on_stream_created)(call->index,
 						  call_med->strm.a.stream,
 						  strm_idx,
@@ -1906,13 +1936,15 @@ static pj_status_t create_aud_param(pjmedia_aud_param *param,
 				    unsigned bits_per_sample)
 {
     pj_status_t status;
+    pj_bool_t speaker_only = (pjsua_var.snd_mode & PJSUA_SND_DEV_SPEAKER_ONLY);
 
     /* Normalize device ID with new convention about default device ID */
     if (playback_dev == PJMEDIA_AUD_DEFAULT_CAPTURE_DEV)
 	playback_dev = PJMEDIA_AUD_DEFAULT_PLAYBACK_DEV;
 
     /* Create default parameters for the device */
-    status = pjmedia_aud_dev_default_param(capture_dev, param);
+    status = pjmedia_aud_dev_default_param((speaker_only? playback_dev:
+    					    capture_dev), param);
     if (status != PJ_SUCCESS) {
 	pjsua_perror(THIS_FILE, "Error retrieving default audio "
 				"device parameters", status);
@@ -2166,7 +2198,7 @@ static pj_status_t open_snd_dev(pjmedia_snd_port_param *param)
     }
 
     /* Update sound device name. */
-    {
+    if (!speaker_only) {
 	pjmedia_aud_dev_info rec_info;
 	pjmedia_aud_stream *strm;
 	pjmedia_aud_param si;
@@ -2243,8 +2275,11 @@ static void close_snd_dev(void)
 	strm = pjmedia_snd_port_get_snd_stream(pjsua_var.snd_port);
 	pjmedia_aud_stream_get_param(strm, &param);
 
-	if (pjmedia_aud_dev_get_info(param.rec_id, &cap_info) != PJ_SUCCESS)
+	if (param.rec_id == PJSUA_SND_NO_DEV ||
+	    pjmedia_aud_dev_get_info(param.rec_id, &cap_info) != PJ_SUCCESS)
+	{
 	    cap_info.name[0] = '\0';
+	}
 	if (pjmedia_aud_dev_get_info(param.play_id, &play_info) != PJ_SUCCESS)
 	    play_info.name[0] = '\0';
 

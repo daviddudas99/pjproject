@@ -286,7 +286,7 @@
 /**
  * Maximum number of ICE components.
  */
-#define PJ_ICE_MAX_COMP				    (2<<PJ_ICE_COMP_BITS)
+#define PJ_ICE_MAX_COMP				    (1<<PJ_ICE_COMP_BITS)
 
 /**
  * Use the priority value according to the ice-draft.
@@ -454,6 +454,17 @@
  */
 #ifndef PJ_ICE_PWD_LEN
 #   define PJ_ICE_PWD_LEN			    24
+#endif
+
+
+/**
+ * This constant specifies whether ICE stream transport should allow TURN
+ * client session to automatically renew permission for all remote candidates.
+ *
+ * Default: PJ_FALSE
+ */
+#ifndef PJ_ICE_ST_USE_TURN_PERMANENT_PERM
+#   define PJ_ICE_ST_USE_TURN_PERMANENT_PERM	    PJ_FALSE
 #endif
 
 

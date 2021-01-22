@@ -1064,7 +1064,9 @@ pj_status_t pjsua_vid_channel_update(pjsua_call_media *call_med,
 
 #if defined(PJMEDIA_STREAM_ENABLE_KA) && PJMEDIA_STREAM_ENABLE_KA!=0
 	/* Enable/disable stream keep-alive and NAT hole punch. */
-	si->use_ka = pjsua_var.acc[call->acc_id].cfg.use_stream_ka;
+	si->use_ka = acc->cfg.use_stream_ka;
+
+        si->ka_cfg = acc->cfg.stream_ka_cfg;
 #endif
 
 	/* Try to get shared format ID between the capture device and 
@@ -1097,6 +1099,24 @@ pj_status_t pjsua_vid_channel_update(pjsua_call_media *call_med,
 		}
 	    }
 	}
+
+        if (!call->hanging_up && pjsua_var.ua_cfg.cb.on_stream_precreate) {
+            pjsua_on_stream_precreate_param prm;
+            prm.stream_idx = call_med->idx;
+            prm.stream_info.type = PJMEDIA_TYPE_VIDEO;
+            prm.stream_info.info.vid = *si;
+            (*pjsua_var.ua_cfg.cb.on_stream_precreate)(call->index, &prm);
+
+            /* Copy back only the fields which are allowed to be changed. */
+            si->jb_init = prm.stream_info.info.vid.jb_init;
+            si->jb_min_pre = prm.stream_info.info.vid.jb_min_pre;
+            si->jb_max_pre = prm.stream_info.info.vid.jb_max_pre;
+            si->jb_max = prm.stream_info.info.vid.jb_max;
+#if defined(PJMEDIA_STREAM_ENABLE_KA) && (PJMEDIA_STREAM_ENABLE_KA != 0)
+            si->use_ka = prm.stream_info.info.vid.use_ka;
+#endif
+            si->rtcp_sdes_bye_disabled = prm.stream_info.info.vid.rtcp_sdes_bye_disabled;
+        }
 
 	/* Create session based on session info. */
 	status = pjmedia_vid_stream_create(pjsua_var.med_endpt, NULL, si,
@@ -1831,7 +1851,7 @@ static void call_get_vid_strm_info(pjsua_call *call,
 
 /* Send SDP reoffer. */
 static pj_status_t call_reoffer_sdp(pjsua_call_id call_id,
-				    const pjmedia_sdp_session *sdp)
+				    pjmedia_sdp_session *sdp)
 {
     pjsua_call *call;
     pjsip_tx_data *tdata;
@@ -1846,6 +1866,13 @@ static pj_status_t call_reoffer_sdp(pjsua_call_id call_id,
 	PJ_LOG(3,(THIS_FILE, "Can not re-INVITE call that is not confirmed"));
 	pjsip_dlg_dec_lock(dlg);
 	return PJSIP_ESESSIONSTATE;
+    }
+
+    /* Notify application */
+    if (!call->hanging_up && pjsua_var.ua_cfg.cb.on_call_sdp_created) {
+	(*pjsua_var.ua_cfg.cb.on_call_sdp_created)(call_id, sdp,
+						   call->inv->pool_prov,
+						   NULL);
     }
 
     /* Create re-INVITE with new offer */

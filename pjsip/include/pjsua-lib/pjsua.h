@@ -395,6 +395,28 @@ typedef struct pj_stun_resolve_result pj_stun_resolve_result;
 
 
 /**
+ * Default options that will be passed when creating ice transport.
+ * See #pjmedia_transport_ice_options.
+ */
+#ifndef PJSUA_ICE_TRANSPORT_OPTION
+#   define PJSUA_ICE_TRANSPORT_OPTION	0
+#endif
+
+/**
+ * Interval of checking for any new ICE candidate when trickle ICE is active.
+ * Trickle ICE gathers local ICE candidates, such as STUN and TURN candidates,
+ * in the background, while SDP offer/answer negotiation is being performed.
+ * Later, when any new ICE candidate is found, the endpoint will convey
+ * the candidate to the remote endpoint via SIP INFO.
+ *
+ * Default: 100 ms
+ */
+#ifndef PJSUA_TRICKLE_ICE_NEW_CAND_CHECK_INTERVAL
+#   define PJSUA_TRICKLE_ICE_NEW_CAND_CHECK_INTERVAL	100
+#endif
+
+
+/**
  * This enumeration represents pjsua state.
  */
 typedef enum pjsua_state
@@ -528,6 +550,58 @@ typedef struct pjsua_reg_info
     pj_bool_t			 renew;     /**< Non-zero for registration and 
 						 zero for unregistration. */
 } pjsua_reg_info;
+
+
+/**
+ * Media stream info.
+ */
+typedef struct pjsua_stream_info
+{
+    /** Media type of this stream. */
+    pjmedia_type type;
+
+    /** Stream info (union). */
+    union {
+	/** Audio stream info */
+	pjmedia_stream_info	aud;
+
+	/** Video stream info */
+	pjmedia_vid_stream_info	vid;
+    } info;
+
+} pjsua_stream_info;
+
+
+/**
+ * Media stream statistic.
+ */
+typedef struct pjsua_stream_stat
+{
+    /** RTCP statistic. */
+    pjmedia_rtcp_stat	rtcp;
+
+    /** Jitter buffer statistic. */
+    pjmedia_jb_state	jbuf;
+
+} pjsua_stream_stat;
+
+
+/**
+ * Structure to be passed to on stream precreate callback.
+ * See #on_stream_precreate().
+ */
+typedef struct pjsua_on_stream_precreate_param
+{
+    /**
+     * Stream index in the media session, read-only.
+     */
+    unsigned            stream_idx;
+
+    /**
+     * Parameters that the stream will be created from.
+     */
+    pjsua_stream_info   stream_info;
+} pjsua_on_stream_precreate_param;
 
 
 /**
@@ -1047,6 +1121,17 @@ typedef struct pjsua_callback
 			        pj_pool_t *pool,
 			        const pjmedia_sdp_session *rem_sdp);
 
+    /**
+     * Notify application when an audio media session is about to be created
+     * (as opposed to #on_stream_created() and #on_stream_created2() which are
+     * called *after* the session has been created). The application may change
+     * stream parameters like the jitter buffer size.
+     *
+     * @param call_id       Call identification.
+     * @param param         The on stream precreate callback parameter.
+     */
+    void (*on_stream_precreate)(pjsua_call_id call_id,
+                                pjsua_on_stream_precreate_param *param);
 
     /**
      * Notify application when audio media session is created and before it is
@@ -3057,7 +3142,7 @@ PJ_DECL(pj_status_t) pjsua_transport_register(pjsip_transport *tp,
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
  */
-PJ_DEF(pj_status_t) pjsua_tpfactory_register( pjsip_tpfactory *tf,
+PJ_DECL(pj_status_t) pjsua_tpfactory_register( pjsip_tpfactory *tf,
 					      pjsua_transport_id *p_id);
 
 /**
@@ -3104,16 +3189,18 @@ PJ_DECL(pj_status_t) pjsua_transport_set_enable(pjsua_transport_id id,
 
 
 /**
- * Close the transport. If transport is forcefully closed, it will be
- * immediately closed, and any pending transactions that are using the
- * transport may not terminate properly (it may even crash). Otherwise, 
- * the system will wait until all transactions are closed while preventing 
- * new users from using the transport, and will close the transport when 
- * it is safe to do so.
+ * Close the transport. The system will wait until all transactions are
+ * closed while preventing new users from using the transport, and will
+ * close the transport when it is safe to do so.
+ *
+ * NOTE: Forcefully closing transport (force = PJ_TRUE) is deprecated,
+ * since any pending transactions that are using the transport may not
+ * terminate properly and can even crash. Application wishing to immediately
+ * close the transport for the purpose of restarting it should use
+ * #pjsua_handle_ip_change() instead.
  *
  * @param id		Transport ID.
- * @param force		Non-zero to immediately close the transport. This
- *			is not recommended!
+ * @param force		Must be PJ_FALSE. force = PJ_TRUE is deprecated.
  *
  * @return		PJ_SUCCESS on success, or the appropriate error code.
  */
@@ -4118,6 +4205,13 @@ typedef struct pjsua_acc_config
      * Default: PJ_FALSE (disabled)
      */
     pj_bool_t	     use_stream_ka;
+
+    /**
+     * Specify the keepalive configuration for stream.
+     *
+     * Default: see #pjmedia_stream_ka_config
+     */
+    pjmedia_stream_ka_config stream_ka_cfg;
 #endif
 
     /**
@@ -4765,7 +4859,6 @@ typedef enum pjsua_vid_req_keyframe_method
 
     /**
      * Requesting keyframe via Picture Loss Indication of RTCP feedback.
-     * This is currently not supported.
      */
     PJSUA_VID_REQ_KEYFRAME_RTCP_PLI	= 2
 
@@ -5016,40 +5109,6 @@ typedef enum pjsua_call_flag
 
 } pjsua_call_flag;
 
-
-/**
- * Media stream info.
- */
-typedef struct pjsua_stream_info
-{
-    /** Media type of this stream. */
-    pjmedia_type type;
-
-    /** Stream info (union). */
-    union {
-	/** Audio stream info */
-	pjmedia_stream_info	aud;
-
-	/** Video stream info */
-	pjmedia_vid_stream_info	vid;
-    } info;
-
-} pjsua_stream_info;
-
-
-/**
- * Media stream statistic.
- */
-typedef struct pjsua_stream_stat
-{
-    /** RTCP statistic. */
-    pjmedia_rtcp_stat	rtcp;
-
-    /** Jitter buffer statistic. */
-    pjmedia_jb_state	jbuf;
-
-} pjsua_stream_stat;
-
 /**
  * This enumeration represents video stream operation on a call.
  * See also #pjsua_call_vid_strm_op_param for further info.
@@ -5232,9 +5291,11 @@ pjsua_call_send_dtmf_param_default(pjsua_call_send_dtmf_param *param);
 PJ_DECL(unsigned) pjsua_call_get_max_count(void);
 
 /**
- * Get number of currently active calls.
+ * Get the number of current calls. The number includes active calls
+ * (pjsua_call_is_active(call_id) == PJ_TRUE), as well as calls that
+ * are no longer active but still in the process of hanging up.
  *
- * @return		Number of currently active calls.
+ * @return		Number of current calls.
  */
 PJ_DECL(unsigned) pjsua_call_get_count(void);
 
@@ -5511,6 +5572,19 @@ pjsua_call_answer_with_sdp(pjsua_call_id call_id,
  * will hangup the call regardless of the state and role of the call,
  * while #pjsua_call_answer() only works with incoming calls on EARLY
  * state.
+ *
+ * After calling this function, media will be deinitialized (call media
+ * callbacks, if any, will still be received) and then, on_call_state()
+ * will be immediately called with state DISCONNECTED. No further
+ * call callbacks will be received after this. The call hangup process
+ * itself (sending BYE, waiting for the response, and resource cleanup)
+ * will continue in the background and the call slot can be reused only
+ * after this process is completed. If application has limited call slots
+ * and would like to check if there are any free slots remaining, it can
+ * query the number of free slots using the APIs:
+ * pjsua_call_get_max_count()-pjsua_call_get_count()
+ *
+ * Note that on_call_tsx_state() will not be called when using this API.
  *
  * @param call_id	Call identification.
  * @param code		Optional status code to be sent when we're rejecting
@@ -6706,6 +6780,14 @@ struct pjsua_media_config
      * Default: -1 (to use default stream settings, currently 360 msec)
      */
     int			jb_max;
+
+    /**
+     * Set the algorithm the jitter buffer uses to discard frames in order to
+     * adjust the latency.
+     *
+     * Default: PJMEDIA_JB_DISCARD_PROGRESSIVE
+     */
+    pjmedia_jb_discard_algo jb_discard_algo;
 
     /**
      * Enable ICE

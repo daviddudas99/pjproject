@@ -394,6 +394,22 @@ static pj_str_t ssl_strerror(pj_status_t status,
     return errstr;
 }
 
+/* Additional ciphers recognized by SSL_set_cipher_list()
+   but not returned from SSL_get_ciphers().
+   NOTE: ids are designed to not conflict with those from
+         SSL_get_cipher() which get masked to the lower 24
+         bits before use. 
+*/
+static const struct ssl_ciphers_t ADDITIONAL_CIPHERS[] = {
+        {0xFF000000, "DEFAULT"},
+        {0xFF000001, "@SECLEVEL=1"},
+        {0xFF000002, "@SECLEVEL=2"},
+        {0xFF000003, "@SECLEVEL=3"},
+        {0xFF000004, "@SECLEVEL=4"},
+        {0xFF000005, "@SECLEVEL=5"}
+};
+static const int ADDITIONAL_CIPHER_COUNT = 
+    sizeof (ADDITIONAL_CIPHERS) / sizeof (ADDITIONAL_CIPHERS[0]);
 
 /*
  *******************************************************************
@@ -657,8 +673,8 @@ static pj_status_t init_openssl(void)
 	sk_cipher = SSL_get_ciphers(ssl);
 
 	n = sk_SSL_CIPHER_num(sk_cipher);
-	if (n > PJ_ARRAY_SIZE(ssl_ciphers))
-	    n = PJ_ARRAY_SIZE(ssl_ciphers);
+	if (n > PJ_ARRAY_SIZE(ssl_ciphers) - ADDITIONAL_CIPHER_COUNT)
+	    n = PJ_ARRAY_SIZE(ssl_ciphers) - ADDITIONAL_CIPHER_COUNT;
 
 	for (i = 0; i < n; ++i) {
 	    const SSL_CIPHER *c;
@@ -668,6 +684,11 @@ static pj_status_t init_openssl(void)
 				    0x00FFFFFF;
 	    ssl_ciphers[i].name = SSL_CIPHER_get_name(c);
 	}
+
+	/* Add cipher aliases not returned from SSL_get_ciphers() */
+	for (i = 0; i < ADDITIONAL_CIPHER_COUNT; ++i) {
+	    ssl_ciphers[n++] = ADDITIONAL_CIPHERS[i];
+	}
 	ssl_cipher_num = n;
 
 	ssl_sess = SSL_SESSION_new();
@@ -675,10 +696,53 @@ static pj_status_t init_openssl(void)
 
 #if !USING_LIBRESSL && !defined(OPENSSL_NO_EC) \
     && OPENSSL_VERSION_NUMBER >= 0x1000200fL
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL
+	ssl_curves_num = EC_get_builtin_curves(NULL, 0);
+#else
 	ssl_curves_num = SSL_get_shared_curve(ssl,-1);
+
 	if (ssl_curves_num > PJ_ARRAY_SIZE(ssl_curves))
 	    ssl_curves_num = PJ_ARRAY_SIZE(ssl_curves);
+#endif
 
+	if( ssl_curves_num > 0 ) {
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL
+	    EC_builtin_curve * curves = NULL;
+
+	    curves = OPENSSL_malloc((int)sizeof(*curves) * ssl_curves_num);
+	    if (!EC_get_builtin_curves(curves, ssl_curves_num)) {
+		OPENSSL_free(curves);
+		curves = NULL;
+		ssl_curves_num = 0;
+	    }
+
+	    n = ssl_curves_num;
+	    ssl_curves_num = 0;
+
+	    for (i = 0; i < n; i++) {
+		nid = curves[i].nid;
+
+		if ( 0 != get_cid_from_nid(nid) ) {
+		    cname = OBJ_nid2sn(nid);
+
+		    if (!cname)
+			cname = OBJ_nid2sn(nid);
+
+		    if (cname) {
+			ssl_curves[ssl_curves_num].id = get_cid_from_nid(nid);
+			ssl_curves[ssl_curves_num].name = cname;
+
+			ssl_curves_num++;
+
+			if (ssl_curves_num >= PJ_SSL_SOCK_MAX_CURVES )
+			    break;
+		    }
+		}
+	    }
+
+	    if(curves)
+		OPENSSL_free(curves);
+#else
 	for (i = 0; i < ssl_curves_num; i++) {
 	    nid = SSL_get_shared_curve(ssl, i);
 
@@ -693,6 +757,9 @@ static pj_status_t init_openssl(void)
 
 	    ssl_curves[i].id   = get_cid_from_nid(nid);
 	    ssl_curves[i].name = cname;
+	}
+#endif
+
 	}
 #else
 	PJ_UNUSED_ARG(nid);
@@ -966,8 +1033,15 @@ static pj_status_t ssl_create(pj_ssl_sock_t *ssock)
     if (ctx == NULL) {
 	return GET_SSL_STATUS(ssock);
     }
+    ossock->ossl_ctx = ctx;
+
     if (ssl_opt)
 	SSL_CTX_set_options(ctx, ssl_opt);
+
+    /* Set cipher list */
+    status = set_cipher_list(ssock);
+    if (status != PJ_SUCCESS)
+        return status;
 
     /* Apply credentials */
     if (cert) {
@@ -993,6 +1067,13 @@ static pj_status_t ssl_create(pj_ssl_sock_t *ssock)
 		}
 		SSL_CTX_free(ctx);
 		return status;
+	    } else {
+		PJ_LOG(4,(ssock->pool->obj_name,
+			  "CA certificates loaded from '%s%s%s'",
+			  cert->CA_file.ptr,
+			  ((cert->CA_file.slen && cert->CA_path.slen)?
+				" + ":""),
+			  cert->CA_path.ptr));
 	    }
 	}
     
@@ -1016,6 +1097,10 @@ static pj_status_t ssl_create(pj_ssl_sock_t *ssock)
 			     cert->cert_file.ptr));
 		SSL_CTX_free(ctx);
 		return status;
+	    } else {
+		PJ_LOG(4,(ssock->pool->obj_name,
+			  "Certificate chain loaded from '%s'",
+			  cert->cert_file.ptr));
 	    }
 	}
 
@@ -1033,6 +1118,10 @@ static pj_status_t ssl_create(pj_ssl_sock_t *ssock)
 			     cert->privkey_file.ptr));
 		SSL_CTX_free(ctx);
 		return status;
+	    } else {
+		PJ_LOG(4,(ssock->pool->obj_name,
+			  "Private key loaded from '%s'",
+			  cert->privkey_file.ptr));
 	    }
 
 #if !defined(OPENSSL_NO_DH)
@@ -1078,6 +1167,9 @@ static pj_status_t ssl_create(pj_ssl_sock_t *ssock)
 			BIO_free(cbio);
 			SSL_CTX_free(ctx);
 			return status;
+		    } else {
+			PJ_LOG(4,(ssock->pool->obj_name,
+				  "Certificate chain loaded from buffer"));
 		    }
 		    X509_free(xcert);
 		}
@@ -1095,13 +1187,29 @@ static pj_status_t ssl_create(pj_ssl_sock_t *ssock)
 								  NULL, NULL);
 
 		if (inf != NULL) {
-		    int i = 0;		    
+		    int i = 0, cnt = 0;
 		    for (; i < sk_X509_INFO_num(inf); i++) {
 			X509_INFO *itmp = sk_X509_INFO_value(inf, i);
-			if (itmp->x509) {
-			    X509_STORE_add_cert(cts, itmp->x509);
+			if (!itmp->x509)
+			    continue;
+
+			rc = X509_STORE_add_cert(cts, itmp->x509);
+			if (rc == 1) {
+			    ++cnt;
+			} else {
+#if PJ_LOG_MAX_LEVEL >= 4
+			    char buf[256];
+			    PJ_LOG(4,(ssock->pool->obj_name,
+				      "Error adding CA cert: %s",
+				      X509_NAME_oneline(
+					X509_get_subject_name(itmp->x509),
+					buf, sizeof(buf))));
+#endif
 			}
 		    }
+		    PJ_LOG(4,(ssock->pool->obj_name,
+			      "CA certificates loaded from buffer (cnt=%d)",
+			      cnt));
 		}
 		sk_X509_INFO_pop_free(inf, X509_INFO_free);
 		BIO_free(cbio);
@@ -1115,7 +1223,8 @@ static pj_status_t ssl_create(pj_ssl_sock_t *ssock)
 	    kbio = BIO_new_mem_buf((void*)cert->privkey_buf.ptr,
 				   cert->privkey_buf.slen);
 	    if (kbio != NULL) {
-		pkey = PEM_read_bio_PrivateKey(kbio, NULL, 0, NULL);
+		pkey = PEM_read_bio_PrivateKey(kbio, NULL, &password_cb,
+					       cert);
 		if (pkey) {
 		    rc = SSL_CTX_use_PrivateKey(ctx, pkey);
 		    if (rc != 1) {
@@ -1126,9 +1235,16 @@ static pj_status_t ssl_create(pj_ssl_sock_t *ssock)
 			BIO_free(kbio);
 			SSL_CTX_free(ctx);
 			return status;
+		    } else {
+			PJ_LOG(4,(ssock->pool->obj_name,
+				  "Private key loaded from buffer"));
 		    }
 		    EVP_PKEY_free(pkey);
+		} else {
+		    PJ_LOG(1,(ssock->pool->obj_name,
+			      "Error reading private key from buffer"));
 		}
+
 		if (ssock->is_server) {
 		    dh = PEM_read_bio_DHparams(kbio, NULL, NULL, NULL);
 		    if (dh != NULL) {
@@ -1273,8 +1389,16 @@ static pj_status_t ssl_create(pj_ssl_sock_t *ssock)
                 BIO_free(new_bio);
         }
 
-        if (ca_dn != NULL)
-            SSL_CTX_set_client_CA_list(ctx, ca_dn);
+	if (ca_dn != NULL) {
+	    SSL_CTX_set_client_CA_list(ctx, ca_dn);
+	    PJ_LOG(4,(ssock->pool->obj_name,
+		      "CA certificates loaded from %s",
+		      (cert->CA_file.slen?cert->CA_file.ptr:"buffer")));
+	} else {
+	    PJ_LOG(1,(ssock->pool->obj_name,
+		      "Error reading CA certificates from %s",
+		      (cert->CA_file.slen?cert->CA_file.ptr:"buffer")));
+	}
     }
 
     /* Early sensitive data cleanup after OpenSSL context setup. However,
@@ -1286,7 +1410,6 @@ static pj_status_t ssl_create(pj_ssl_sock_t *ssock)
     }
 
     /* Create SSL instance */
-    ossock->ossl_ctx = ctx;
     ossock->ossl_ssl = SSL_new(ossock->ossl_ctx);
     if (ossock->ossl_ssl == NULL) {
 	return GET_SSL_STATUS(ssock);
@@ -1301,11 +1424,6 @@ static pj_status_t ssl_create(pj_ssl_sock_t *ssock)
 	mode |= SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
 
     SSL_set_verify(ossock->ossl_ssl, mode, &verify_cb);
-
-    /* Set cipher list */
-    status = set_cipher_list(ssock);
-    if (status != PJ_SUCCESS)
-	return status;
 
     /* Set curve list */
     status = set_curves_list(ssock);
@@ -1420,7 +1538,7 @@ static pj_status_t set_cipher_list(pj_ssl_sock_t *ssock)
     int j, ret;
 
     if (ssock->param.ciphers_num == 0) {
-	ret = SSL_set_cipher_list(ossock->ossl_ssl, PJ_SSL_SOCK_OSSL_CIPHERS);
+	ret = SSL_CTX_set_cipher_list(ossock->ossl_ctx, PJ_SSL_SOCK_OSSL_CIPHERS);
     	if (ret < 1) {
 	    return GET_SSL_STATUS(ssock);
     	}    
@@ -1438,22 +1556,12 @@ static pj_status_t set_cipher_list(pj_ssl_sock_t *ssock)
 
     pj_strset(&cipher_list, buf, 0);
 
-    /* Set SSL with ALL available ciphers */
-    SSL_set_cipher_list(ossock->ossl_ssl, "ALL:COMPLEMENTOFALL");
-
     /* Generate user specified cipher list in OpenSSL format */
-    sk_cipher = SSL_get_ciphers(ossock->ossl_ssl);
     for (i = 0; i < ssock->param.ciphers_num; ++i) {
-	for (j = 0; j < sk_SSL_CIPHER_num(sk_cipher); ++j) {
-	    const SSL_CIPHER *c;
-	    c = sk_SSL_CIPHER_value(sk_cipher, j);
-	    if (ssock->param.ciphers[i] == (pj_ssl_cipher)
-					   ((pj_uint32_t)SSL_CIPHER_get_id(c) &
-					   0x00FFFFFF))
+	for (j = 0; j < ssl_cipher_num; ++j) {
+	    if (ssock->param.ciphers[i] == ssl_ciphers[j].id)
 	    {
-		const char *c_name;
-
-		c_name = SSL_CIPHER_get_name(c);
+		const char *c_name = ssl_ciphers[j].name;
 
 		/* Check buffer size */
 		if (cipher_list.slen + pj_ansi_strlen(c_name) + 2 >
@@ -1478,7 +1586,7 @@ static pj_status_t set_cipher_list(pj_ssl_sock_t *ssock)
     cipher_list.ptr[cipher_list.slen] = '\0';
 
     /* Finally, set chosen cipher list */
-    ret = SSL_set_cipher_list(ossock->ossl_ssl, buf);
+    ret = SSL_CTX_set_cipher_list(ossock->ossl_ctx, buf);
     if (ret < 1) {
 	pj_pool_release(tmp_pool);
 	return GET_SSL_STATUS(ssock);
@@ -1907,7 +2015,9 @@ static void ssl_set_peer_name(pj_ssl_sock_t *ssock)
     ossl_sock_t *ossock = (ossl_sock_t *)ssock;
 
     /* Set server name to connect */
-    if (ssock->param.server_name.slen) {
+    if (ssock->param.server_name.slen &&
+        get_ip_addr_ver(&ssock->param.server_name) == 0)
+    {
 	/* Server name is null terminated already */
 	if (!SSL_set_tlsext_host_name(ossock->ossl_ssl, 
 				      ssock->param.server_name.ptr))
