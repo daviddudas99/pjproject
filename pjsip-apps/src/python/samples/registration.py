@@ -1,4 +1,4 @@
-# $Id$
+# $Id: registration.py 2171 2008-07-24 09:01:33Z bennylp $
 #
 # SIP account and registration sample. In this sample, the program
 # will block to wait until registration is complete
@@ -25,7 +25,7 @@ import threading
 
 
 def log_cb(level, str, len):
-    print str,
+    print(str, end=' ')
 
 class MyAccountCallback(pj.AccountCallback):
     sem = None
@@ -55,16 +55,16 @@ try:
     acc.set_callback(acc_cb)
     acc_cb.wait()
 
-    print "\n"
-    print "Registration complete, status=", acc.info().reg_status, \
-          "(" + acc.info().reg_reason + ")"
-    print "\nPress ENTER to quit"
+    print("\n")
+    print("Registration complete, status=", acc.info().reg_status, \
+          "(" + acc.info().reg_reason + ")")
+    print("\nPress ENTER to quit")
     sys.stdin.readline()
 
     lib.destroy()
     lib = None
 
-except pj.Error, e:
-    print "Exception: " + str(e)
+except pj.Error as e:
+    print("Exception: " + str(e))
     lib.destroy()
 

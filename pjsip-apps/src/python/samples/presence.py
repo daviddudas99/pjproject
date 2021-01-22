@@ -1,4 +1,4 @@
-# $Id$
+# $Id: presence.py 2171 2008-07-24 09:01:33Z bennylp $
 #
 # Presence and instant messaging
 #
@@ -26,7 +26,7 @@ pending_pres = None
 pending_uri = None
 
 def log_cb(level, str, len):
-    print str,
+    print(str, end=' ')
 
 class MyAccountCallback(pj.AccountCallback):
     def __init__(self, account=None):
@@ -37,8 +37,8 @@ class MyAccountCallback(pj.AccountCallback):
         # Allow buddy to subscribe to our presence
         if buddy:
             return (200, None)
-        print 'Incoming SUBSCRIBE request from', from_uri
-        print 'Press "A" to accept and add, "R" to reject the request'
+        print('Incoming SUBSCRIBE request from', from_uri)
+        print('Press "A" to accept and add, "R" to reject the request')
         pending_pres = pres
         pending_uri = from_uri
         return (202, None)
@@ -49,24 +49,24 @@ class MyBuddyCallback(pj.BuddyCallback):
         pj.BuddyCallback.__init__(self, buddy)
 
     def on_state(self):
-        print "Buddy", self.buddy.info().uri, "is",
-        print self.buddy.info().online_text
+        print("Buddy", self.buddy.info().uri, "is", end=' ')
+        print(self.buddy.info().online_text)
 
     def on_pager(self, mime_type, body):
-        print "Instant message from", self.buddy.info().uri, 
-        print "(", mime_type, "):"
-        print body
+        print("Instant message from", self.buddy.info().uri, end=' ') 
+        print("(", mime_type, "):")
+        print(body)
 
     def on_pager_status(self, body, im_id, code, reason):
         if code >= 300:
-            print "Message delivery failed for message",
-            print body, "to", self.buddy.info().uri, ":", reason
+            print("Message delivery failed for message", end=' ')
+            print(body, "to", self.buddy.info().uri, ":", reason)
 
     def on_typing(self, is_typing):
         if is_typing:
-            print self.buddy.info().uri, "is typing"
+            print(self.buddy.info().uri, "is typing")
         else:
-            print self.buddy.info().uri, "stops typing"
+            print(self.buddy.info().uri, "stops typing")
 
 
 lib = pj.Lib()
@@ -79,8 +79,8 @@ try:
     # Create UDP transport which listens to any available port
     transport = lib.create_transport(pj.TransportType.UDP, 
                                      pj.TransportConfig(0))
-    print "\nListening on", transport.info().host, 
-    print "port", transport.info().port, "\n"
+    print("\nListening on", transport.info().host, end=' ') 
+    print("port", transport.info().port, "\n")
     
     # Start the library
     lib.start()
@@ -96,14 +96,14 @@ try:
 
     # Menu loop
     while True:
-        print "My SIP URI is", my_sip_uri
-        print "Menu:  a=add buddy, d=delete buddy, t=toggle", \
-              " online status, i=send IM, q=quit"
+        print("My SIP URI is", my_sip_uri)
+        print("Menu:  a=add buddy, d=delete buddy, t=toggle", \
+              " online status, i=send IM, q=quit")
 
         input = sys.stdin.readline().rstrip("\r\n")
         if input == "a":
             # Add buddy
-            print "Enter buddy URI: ", 
+            print("Enter buddy URI: ", end=' ') 
             input = sys.stdin.readline().rstrip("\r\n")
             if input == "":
                 continue
@@ -116,12 +116,12 @@ try:
 
         elif input == "i":
             if not buddy:
-                print "Add buddy first"
+                print("Add buddy first")
                 continue
 
             buddy.send_typing_ind(True)
 
-            print "Type the message: ", 
+            print("Type the message: ", end=' ') 
             input = sys.stdin.readline().rstrip("\r\n")
             if input == "":
                 buddy.send_typing_ind(False)
@@ -134,7 +134,7 @@ try:
                 buddy.delete()
                 buddy = None
             else:
-                print 'No buddy was added'
+                print('No buddy was added')
 
         elif input == "A":
             if pending_pres:
@@ -144,7 +144,7 @@ try:
                 pending_pres = None
                 pending_uri = None
             else:
-                print "No pending request"
+                print("No pending request")
 
         elif input == "R":
             if pending_pres:
@@ -153,7 +153,7 @@ try:
                 pending_pres = None
                 pending_uri = None
             else:
-                print "No pending request"
+                print("No pending request")
 
         elif input == "q":
             break
@@ -168,8 +168,8 @@ try:
     lib.destroy()
     lib = None
 
-except pj.Error, e:
-    print "Exception: " + str(e)
+except pj.Error as e:
+    print("Exception: " + str(e))
     lib.destroy()
     lib = None
 
