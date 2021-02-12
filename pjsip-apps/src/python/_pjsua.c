@@ -3717,10 +3717,11 @@ static PyObject *py_pjsua_call_xfer(PyObject *pSelf, PyObject *pArgs)
     {
         return NULL;
     }
-
-    if (!PyBytes_Check(pDstUri))
-	return Py_BuildValue("i", 9);
-
+/*  PyBytes_Check(pDstUri) is always false in this implementation
+*   if (!PyBytes_Check(pDstUri))
+*	return Py_BuildValue("i", 9);
+*/
+	
     dest = PyUnicode_ToPJ(pDstUri);
     pjsua_msg_data_init(&msg_data);
 
