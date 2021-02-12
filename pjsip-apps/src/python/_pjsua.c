@@ -3719,7 +3719,7 @@ static PyObject *py_pjsua_call_xfer(PyObject *pSelf, PyObject *pArgs)
     }
 
     if (!PyBytes_Check(pDstUri))
-	return NULL;
+	return 9;
 
     dest = PyUnicode_ToPJ(pDstUri);
     pjsua_msg_data_init(&msg_data);
