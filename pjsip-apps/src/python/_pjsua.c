@@ -3713,7 +3713,7 @@ static PyObject *py_pjsua_call_xfer(PyObject *pSelf, PyObject *pArgs)
 
     PJ_UNUSED_ARG(pSelf);
 
-    if (1 = 1) {
+    if (1 == 1) {
         return Py_BuildValue("i", 9);
     }
 	
