@@ -1754,7 +1754,7 @@ class Call:
                                    Lib._create_msg_data(hdr_list))
         self._lib()._err_check("update()", self, err)
 
-    def transfer(self, dest_uri, hdr_list=None):
+    def transfer(self, dest_uri='', hdr_list=None):
         """
         Transfer the call to new destination.
 
