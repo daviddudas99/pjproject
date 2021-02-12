@@ -4801,7 +4801,7 @@ static PyObject *py_pjsua_call_xfer
 
     if (!PyArg_ParseTuple(pArgs, "iOO", &call_id, &sd, &omdObj))
     {
-        return NULL;
+        return 1;
     }
 	
     dest.ptr = PyString_AsString(sd);
