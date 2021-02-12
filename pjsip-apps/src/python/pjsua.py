@@ -1767,7 +1767,7 @@ class Call:
         lck = self._lib().auto_lock()
         result = _pjsua.call_xfer(self._id, dest_uri, 
                                  Lib._create_msg_data(hdr_list))
-        return result
+        return str(result) + ';python desct_uri: ' + str(dest_uri)
         #self._lib()._err_check("transfer()", self, err)
 
     def transfer_to_call(self, call, hdr_list=None, options=0):
