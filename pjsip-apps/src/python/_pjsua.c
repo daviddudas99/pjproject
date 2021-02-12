@@ -3712,14 +3712,14 @@ static PyObject *py_pjsua_call_xfer(PyObject *pSelf, PyObject *pArgs)
     pj_pool_t *pool = NULL;
 
     PJ_UNUSED_ARG(pSelf);
-
-    if (!PyArg_ParseTuple(pArgs, "iOO", &call_id, &pDstUri, &omdObj)) {
-        return NULL;
-    }
-
-    if (!PyBytes_Check(pDstUri))
-	return NULL;
-
+/*
+*    if (!PyArg_ParseTuple(pArgs, "iOO", &call_id, &pDstUri, &omdObj)) {
+*        return NULL;
+*    }
+*
+*    if (!PyBytes_Check(pDstUri))
+*	return 1;
+*/
     dest = PyUnicode_ToPJ(pDstUri);
     pjsua_msg_data_init(&msg_data);
 
