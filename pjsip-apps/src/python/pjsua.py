@@ -1768,7 +1768,7 @@ class Call:
         result = _pjsua.call_xfer(self._id, dest_uri, 
                                  Lib._create_msg_data(hdr_list))
         return result
-        self._lib()._err_check("transfer()", self, err)
+        #self._lib()._err_check("transfer()", self, err)
 
     def transfer_to_call(self, call, hdr_list=None, options=0):
         """
