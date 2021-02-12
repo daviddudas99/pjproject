@@ -3714,7 +3714,7 @@ static PyObject *py_pjsua_call_xfer(PyObject *pSelf, PyObject *pArgs)
     PJ_UNUSED_ARG(pSelf);
 
     if (!PyArg_ParseTuple(pArgs, "iOO", &call_id, &pDstUri, &omdObj)) {
-        return NULL;
+        return Py_BuildValue("i", 9);
     }
 
     if (!PyBytes_Check(pDstUri))
