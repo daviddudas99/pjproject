@@ -3712,9 +3712,28 @@ static PyObject *py_pjsua_call_xfer(PyObject *pSelf, PyObject *pArgs)
     pj_pool_t *pool = NULL;
 
     PJ_UNUSED_ARG(pSelf);
-	
-    dest = "SIP:anicka@192.168.1.44:33557"
-    
+
+    if (!PyArg_ParseTuple(pArgs, "iO|O", &call_id, &pDstUri, &omdObj)) 
+    {
+        return NULL;
+    }
+
+    if (!PyBytes_Check(pDstUri))
+	return NULL;
+
+    dest = PyUnicode_ToPJ(pDstUri);
+    pjsua_msg_data_init(&msg_data);
+
+    if (omdObj != Py_None) {
+	PyObj_pjsua_msg_data *omd;
+
+        omd = (PyObj_pjsua_msg_data *)omdObj;
+        msg_data.content_type = PyUnicode_ToPJ(omd->content_type);
+        msg_data.msg_body = PyUnicode_ToPJ(omd->msg_body);
+        pool = pjsua_pool_create("pytmp", POOL_SIZE, POOL_SIZE);
+        translate_hdr(pool, &msg_data.hdr_list, omd->hdr_list);
+    }
+
     status = pjsua_call_xfer(call_id, &dest, &msg_data);
 
     if (pool)
