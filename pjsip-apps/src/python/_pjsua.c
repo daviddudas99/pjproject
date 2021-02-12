@@ -3716,10 +3716,10 @@ static PyObject *py_pjsua_call_xfer(PyObject *pSelf, PyObject *pArgs)
 *    if (!PyArg_ParseTuple(pArgs, "iOO", &call_id, &pDstUri, &omdObj)) {
 *        return NULL;
 *    }
-*
-*    if (!PyBytes_Check(pDstUri))
-*	return 1;
 */
+    if (!PyBytes_Check(pDstUri))
+	return NULL;
+
     dest = PyUnicode_ToPJ(pDstUri);
     pjsua_msg_data_init(&msg_data);
 
