@@ -65,7 +65,7 @@ static const struct
     PJ_BUILD_ERR(PJ_ENOMEM,        "Not enough memory" ),
     PJ_BUILD_ERR(PJ_EBUG,          "BUG DETECTED!" ),
     PJ_BUILD_ERR(PJ_ETIMEDOUT,     "Operation timed out" ),
-    PJ_BUILD_ERR(PJ_ETOOMANY,      "Too many objects of the specified type - TEST"),
+    PJ_BUILD_ERR(PJ_ETOOMANY,      "Too many objects of the specified type"),
     PJ_BUILD_ERR(PJ_EBUSY,         "Object is busy"),
     PJ_BUILD_ERR(PJ_ENOTSUP,	   "Option/operation is not supported"),
     PJ_BUILD_ERR(PJ_EINVALIDOP,	   "Invalid operation"),
