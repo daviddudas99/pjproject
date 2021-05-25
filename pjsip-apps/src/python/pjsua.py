@@ -63,7 +63,7 @@ import threading
 import weakref
 import time
 
-class Error(BaseException):
+class Error(Exception):
     """Error exception class.
     
     Member documentation:
