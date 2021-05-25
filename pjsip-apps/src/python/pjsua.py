@@ -2338,7 +2338,7 @@ class Lib:
         lck = self.auto_lock()
         if not cfg: cfg=TransportConfig()
         err, tp_id = _pjsua.transport_create(type, cfg._cvt_to_pjsua())
-        # self._err_check("create_transport()", self, err)
+        self._err_check("create_transport()", self, err)
         return Transport(self, tp_id)
 
     def create_account(self, acc_config, set_default=True, cb=None):
