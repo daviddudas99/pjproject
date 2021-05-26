@@ -73,7 +73,7 @@
      */
     #define PJSIP_MAX_TSX_COUNT 		31
     #define PJSIP_MAX_DIALOG_COUNT 		31
-    #define PJSUA_MAX_CALLS			4
+    #define PJSUA_MAX_CALLS			16
 
     /*
      * PJSUA settings
@@ -85,9 +85,9 @@
     #define PJSUA_DEFAULT_CODEC_QUALITY		4
 
     /* Set maximum number of objects to minimum to reduce memory usage */
-    #define PJSUA_MAX_ACC			4
-    #define PJSUA_MAX_PLAYERS			4
-    #define PJSUA_MAX_RECORDERS			4
+    #define PJSUA_MAX_ACC			10
+    #define PJSUA_MAX_PLAYERS			10
+    #define PJSUA_MAX_RECORDERS			10
     #define PJSUA_MAX_CONF_PORTS		(PJSUA_MAX_CALLS+2*PJSUA_MAX_PLAYERS)
     #define PJSUA_MAX_BUDDIES			32
 
@@ -200,12 +200,12 @@
     /* Set maximum number of dialog/transaction/calls to minimum */
     #define PJSIP_MAX_TSX_COUNT 		31
     #define PJSIP_MAX_DIALOG_COUNT 		31
-    #define PJSUA_MAX_CALLS			4
+    #define PJSUA_MAX_CALLS			16
 
     /* Other pjsua settings */
-    #define PJSUA_MAX_ACC			4
-    #define PJSUA_MAX_PLAYERS			4
-    #define PJSUA_MAX_RECORDERS			4
+    #define PJSUA_MAX_ACC			10
+    #define PJSUA_MAX_PLAYERS			10
+    #define PJSUA_MAX_RECORDERS			10
     #define PJSUA_MAX_CONF_PORTS		(PJSUA_MAX_CALLS+2*PJSUA_MAX_PLAYERS)
     #define PJSUA_MAX_BUDDIES			32
 #endif
@@ -349,12 +349,12 @@
     /* Set maximum number of dialog/transaction/calls to minimum */
     #define PJSIP_MAX_TSX_COUNT 		31
     #define PJSIP_MAX_DIALOG_COUNT 		31
-    #define PJSUA_MAX_CALLS			4
+    #define PJSUA_MAX_CALLS			16
 
     /* Other pjsua settings */
-    #define PJSUA_MAX_ACC			4
-    #define PJSUA_MAX_PLAYERS			4
-    #define PJSUA_MAX_RECORDERS			4
+    #define PJSUA_MAX_ACC			10
+    #define PJSUA_MAX_PLAYERS			10
+    #define PJSUA_MAX_RECORDERS			10
     #define PJSUA_MAX_CONF_PORTS		(PJSUA_MAX_CALLS+2*PJSUA_MAX_PLAYERS)
     #define PJSUA_MAX_BUDDIES			32
 
@@ -409,15 +409,15 @@
     /* Set maximum number of dialog/transaction/calls to minimum */
     #define PJSIP_MAX_TSX_COUNT 		31
     #define PJSIP_MAX_DIALOG_COUNT 		31
-    #define PJSUA_MAX_CALLS			4
+    #define PJSUA_MAX_CALLS			16
 
     /* Separate worker thread for timer and ioqueue */
     // #define PJSUA_SEPARATE_WORKER_FOR_TIMER	1
 
     /* Other pjsua settings */
-    #define PJSUA_MAX_ACC			4
-    #define PJSUA_MAX_PLAYERS			4
-    #define PJSUA_MAX_RECORDERS			4
+    #define PJSUA_MAX_ACC			10
+    #define PJSUA_MAX_PLAYERS			10
+    #define PJSUA_MAX_RECORDERS			10
     #define PJSUA_MAX_CONF_PORTS		(PJSUA_MAX_CALLS+2*PJSUA_MAX_PLAYERS)
     #define PJSUA_MAX_BUDDIES			32
 #endif

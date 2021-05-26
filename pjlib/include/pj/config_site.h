@@ -2,5 +2,6 @@
 #define PJSIP_MAX_RESOLVED_ADDRESSES    10
 
 #define PJSUA_MAX_ACC           10
-#define PJSUA_MAX_CALLS     32
-#define PJSUA_MAX_PLAYERS       32
+#define PJSUA_MAX_CALLS     16
+#define PJSUA_MAX_PLAYERS       10
+#define PJSUA_MAX_RECORDERS       10
