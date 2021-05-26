@@ -848,9 +848,9 @@ PJ_INLINE(pjsip_cfg_t*) pjsip_cfg(void)
  */
 #ifndef PJSIP_MAX_RESOLVED_ADDRESSES
 #   if defined(PJ_HAS_IPV6) && PJ_HAS_IPV6
-#       define PJSIP_MAX_RESOLVED_ADDRESSES	    32
+#       define PJSIP_MAX_RESOLVED_ADDRESSES	    40
 #   else
-#       define PJSIP_MAX_RESOLVED_ADDRESSES	    16
+#       define PJSIP_MAX_RESOLVED_ADDRESSES	    20
 #   endif
 #endif
 

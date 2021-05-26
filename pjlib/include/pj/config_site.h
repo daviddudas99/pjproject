@@ -1,5 +1,5 @@
 #define PJSIP_MAX_TRANSPORTS        10
-#define PJSIP_MAX_RESOLVED_ADDRESSES    10
+#define PJSIP_MAX_RESOLVED_ADDRESSES    40
 
 #define PJSUA_MAX_ACC           10
 #define PJSUA_MAX_CALLS     16
