@@ -2450,11 +2450,11 @@ PJ_DEF(pj_status_t) pjsua_transport_create( pjsip_transport_type_e type,
 	    break;
     }
 
-    if (id == PJ_ARRAY_SIZE(pjsua_var.tpdata)) {
-	status = PJ_ETOOMANY;
-	pjsua_perror(THIS_FILE, "Error creating transport", status);
-	goto on_return;
-    }
+  //   if (id == PJ_ARRAY_SIZE(pjsua_var.tpdata)) {
+	// status = PJ_ETOOMANY;
+	// pjsua_perror(THIS_FILE, "Error creating transport", status);
+	// goto on_return;
+  //   }
 
     /* Create the transport */
     if (type==PJSIP_TRANSPORT_UDP || type==PJSIP_TRANSPORT_UDP6) {
