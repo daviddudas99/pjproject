@@ -2675,11 +2675,11 @@ PJ_DEF(pj_status_t) pjsua_transport_register( pjsip_transport *tp,
 	    break;
     }
 
-    if (id == PJ_ARRAY_SIZE(pjsua_var.tpdata)) {
-	pjsua_perror(THIS_FILE, "Error creating transport", PJ_ETOOMANY);
-	PJSUA_UNLOCK();
-	return PJ_ETOOMANY;
-    }
+  //   if (id == PJ_ARRAY_SIZE(pjsua_var.tpdata)) {
+	// pjsua_perror(THIS_FILE, "Error creating transport", PJ_ETOOMANY);
+	// PJSUA_UNLOCK();
+	// return PJ_ETOOMANY;
+  //   }
 
     /* Save the transport */
     pjsua_var.tpdata[id].type = (pjsip_transport_type_e) tp->key.type;
@@ -2714,11 +2714,11 @@ PJ_DEF(pj_status_t) pjsua_tpfactory_register( pjsip_tpfactory *tf,
 	    break;
     }
 
-    if (id == PJ_ARRAY_SIZE(pjsua_var.tpdata)) {
-	pjsua_perror(THIS_FILE, "Error creating transport", PJ_ETOOMANY);
-	PJSUA_UNLOCK();
-	return PJ_ETOOMANY;
-    }
+  //   if (id == PJ_ARRAY_SIZE(pjsua_var.tpdata)) {
+	// pjsua_perror(THIS_FILE, "Error creating transport", PJ_ETOOMANY);
+	// PJSUA_UNLOCK();
+	// return PJ_ETOOMANY;
+  //   }
 
     /* Save the transport */
     pjsua_var.tpdata[id].type = (pjsip_transport_type_e) tf->type;
