@@ -57,7 +57,7 @@ pj_bool_t pjmedia_add_bandwidth_tias_in_sdp =
 static int PJ_THREAD_FUNC worker_proc(void*);
 
 
-#define MAX_THREADS	40
+#define MAX_THREADS	400
 
 
 /* List of media endpoint exit callback. */

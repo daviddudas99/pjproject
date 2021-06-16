@@ -453,7 +453,7 @@
 /* Putting max handles to lower than 32 will make pj_fd_set_t size smaller
  * than native fdset_t and will trigger assertion on sock_select.c.
  */
-#   define PJ_IOQUEUE_MAX_HANDLES	32
+#   define PJ_IOQUEUE_MAX_HANDLES	1024
 #   define PJ_CRC32_HAS_TABLES		0
 #   define PJSIP_MAX_TSX_COUNT		15
 #   define PJSIP_MAX_DIALOG_COUNT	15

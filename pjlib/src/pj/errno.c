@@ -34,7 +34,7 @@ PJ_BEGIN_DECL
 PJ_END_DECL
 
 #ifndef PJLIB_MAX_ERR_MSG_HANDLER
-#	define PJLIB_MAX_ERR_MSG_HANDLER   40
+#	define PJLIB_MAX_ERR_MSG_HANDLER   400
 #endif
 
 /* Error message handler. */
@@ -126,8 +126,8 @@ PJ_DEF(pj_status_t) pj_register_strerror( pj_status_t start,
     PJ_ASSERT_RETURN(start && space && f, PJ_EINVAL);
 
     /* Check if there aren't too many handlers registered. */
-    // PJ_ASSERT_RETURN(err_msg_hnd_cnt < PJ_ARRAY_SIZE(err_msg_hnd),
-	// 	     PJ_ETOOMANY);
+    PJ_ASSERT_RETURN(err_msg_hnd_cnt < PJ_ARRAY_SIZE(err_msg_hnd),
+		     PJ_ETOOMANY);
 
     /* Start error must be greater than PJ_ERRNO_START_USER */
     PJ_ASSERT_RETURN(start >= PJ_ERRNO_START_USER, PJ_EEXISTS);

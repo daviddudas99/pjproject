@@ -149,7 +149,7 @@ static int initialized;
     static long thread_tls_id;
     static pj_mutex_t critical_section;
 #else
-#   define MAX_THREADS 40
+#   define MAX_THREADS 400
     static int tls_flag[MAX_THREADS];
     static void *tls[MAX_THREADS];
 #endif

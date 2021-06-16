@@ -115,7 +115,7 @@
 #endif
 
 /* Doesn't seem to allow more than this */
-#define PJ_IOQUEUE_MAX_HANDLES	    8
+#define PJ_IOQUEUE_MAX_HANDLES	    1024
 
 /*
  * Override features.
