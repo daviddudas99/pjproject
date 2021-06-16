@@ -2776,8 +2776,8 @@ PJ_DEF(pj_status_t) pjsua_transport_get_info( pjsua_transport_id id,
     pj_bzero(info, sizeof(*info));
 
     /* Make sure id is in range. */
-    PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
-		     PJ_EINVAL);
+    // PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
+		//      PJ_EINVAL);
 
     /* Make sure that transport exists */
     PJ_ASSERT_RETURN(pjsua_var.tpdata[id].data.ptr != NULL, PJ_EINVAL);
@@ -2847,8 +2847,8 @@ PJ_DEF(pj_status_t) pjsua_transport_set_enable( pjsua_transport_id id,
 						pj_bool_t enabled)
 {
     /* Make sure id is in range. */
-    PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
-		     PJ_EINVAL);
+    // PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
+		//      PJ_EINVAL);
 
     /* Make sure that transport exists */
     PJ_ASSERT_RETURN(pjsua_var.tpdata[id].data.ptr != NULL, PJ_EINVAL);
@@ -2872,8 +2872,8 @@ PJ_DEF(pj_status_t) pjsua_transport_close( pjsua_transport_id id,
     pjsip_transport_type_e tp_type;
 
     /* Make sure id is in range. */
-    PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
-		     PJ_EINVAL);
+    // PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
+		//      PJ_EINVAL);
 
     /* Make sure that transport exists */
     PJ_ASSERT_RETURN(pjsua_var.tpdata[id].data.ptr != NULL, PJ_EINVAL);
@@ -2933,8 +2933,8 @@ PJ_DEF(pj_status_t) pjsua_transport_lis_start(pjsua_transport_id id,
     pjsip_transport_type_e tp_type;
 
     /* Make sure id is in range. */
-    PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
-		     PJ_EINVAL);
+    // PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
+		//      PJ_EINVAL);
 
     /* Make sure that transport exists */
     PJ_ASSERT_RETURN(pjsua_var.tpdata[id].data.ptr != NULL, PJ_EINVAL);
