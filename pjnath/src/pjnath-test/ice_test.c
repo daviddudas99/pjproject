@@ -29,7 +29,7 @@ enum
 
 #define NODELAY		0xFFFFFFFF
 #define SRV_DOMAIN	"pjsip.lab.domain"
-#define MAX_THREADS	16
+#define MAX_THREADS	400
 
 #define THIS_FILE	"ice_test.c"
 #define INDENT		"    "

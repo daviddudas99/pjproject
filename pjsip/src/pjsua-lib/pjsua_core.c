@@ -104,7 +104,7 @@ PJ_DEF(void) pjsua_config_default(pjsua_config *cfg)
 {
     pj_bzero(cfg, sizeof(*cfg));
 
-    cfg->max_calls = ((PJSUA_MAX_CALLS) < 4) ? (PJSUA_MAX_CALLS) : 4;
+    cfg->max_calls = ((PJSUA_MAX_CALLS) < 16) ? (PJSUA_MAX_CALLS) : 16;
     cfg->thread_cnt = PJSUA_SEPARATE_WORKER_FOR_TIMER? 2 : 1;
     cfg->nat_type_in_sdp = 1;
     cfg->stun_ignore_failure = PJ_TRUE;
@@ -2450,11 +2450,11 @@ PJ_DEF(pj_status_t) pjsua_transport_create( pjsip_transport_type_e type,
 	    break;
     }
 
-    if (id == PJ_ARRAY_SIZE(pjsua_var.tpdata)) {
-	status = PJ_ETOOMANY;
-	pjsua_perror(THIS_FILE, "Error creating transport", status);
-	goto on_return;
-    }
+  //   if (id == PJ_ARRAY_SIZE(pjsua_var.tpdata)) {
+	// status = PJ_ETOOMANY;
+	// pjsua_perror(THIS_FILE, "Error creating transport", status);
+	// goto on_return;
+  //   }
 
     /* Create the transport */
     if (type==PJSIP_TRANSPORT_UDP || type==PJSIP_TRANSPORT_UDP6) {
@@ -2675,11 +2675,11 @@ PJ_DEF(pj_status_t) pjsua_transport_register( pjsip_transport *tp,
 	    break;
     }
 
-    if (id == PJ_ARRAY_SIZE(pjsua_var.tpdata)) {
-	pjsua_perror(THIS_FILE, "Error creating transport", PJ_ETOOMANY);
-	PJSUA_UNLOCK();
-	return PJ_ETOOMANY;
-    }
+  //   if (id == PJ_ARRAY_SIZE(pjsua_var.tpdata)) {
+	// pjsua_perror(THIS_FILE, "Error creating transport", PJ_ETOOMANY);
+	// PJSUA_UNLOCK();
+	// return PJ_ETOOMANY;
+  //   }
 
     /* Save the transport */
     pjsua_var.tpdata[id].type = (pjsip_transport_type_e) tp->key.type;
@@ -2714,11 +2714,11 @@ PJ_DEF(pj_status_t) pjsua_tpfactory_register( pjsip_tpfactory *tf,
 	    break;
     }
 
-    if (id == PJ_ARRAY_SIZE(pjsua_var.tpdata)) {
-	pjsua_perror(THIS_FILE, "Error creating transport", PJ_ETOOMANY);
-	PJSUA_UNLOCK();
-	return PJ_ETOOMANY;
-    }
+  //   if (id == PJ_ARRAY_SIZE(pjsua_var.tpdata)) {
+	// pjsua_perror(THIS_FILE, "Error creating transport", PJ_ETOOMANY);
+	// PJSUA_UNLOCK();
+	// return PJ_ETOOMANY;
+  //   }
 
     /* Save the transport */
     pjsua_var.tpdata[id].type = (pjsip_transport_type_e) tf->type;
@@ -2776,8 +2776,8 @@ PJ_DEF(pj_status_t) pjsua_transport_get_info( pjsua_transport_id id,
     pj_bzero(info, sizeof(*info));
 
     /* Make sure id is in range. */
-    PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
-		     PJ_EINVAL);
+    // PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
+		//      PJ_EINVAL);
 
     /* Make sure that transport exists */
     PJ_ASSERT_RETURN(pjsua_var.tpdata[id].data.ptr != NULL, PJ_EINVAL);
@@ -2847,8 +2847,8 @@ PJ_DEF(pj_status_t) pjsua_transport_set_enable( pjsua_transport_id id,
 						pj_bool_t enabled)
 {
     /* Make sure id is in range. */
-    PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
-		     PJ_EINVAL);
+    // PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
+		//      PJ_EINVAL);
 
     /* Make sure that transport exists */
     PJ_ASSERT_RETURN(pjsua_var.tpdata[id].data.ptr != NULL, PJ_EINVAL);
@@ -2872,8 +2872,8 @@ PJ_DEF(pj_status_t) pjsua_transport_close( pjsua_transport_id id,
     pjsip_transport_type_e tp_type;
 
     /* Make sure id is in range. */
-    PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
-		     PJ_EINVAL);
+    // PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
+		//      PJ_EINVAL);
 
     /* Make sure that transport exists */
     PJ_ASSERT_RETURN(pjsua_var.tpdata[id].data.ptr != NULL, PJ_EINVAL);
@@ -2933,8 +2933,8 @@ PJ_DEF(pj_status_t) pjsua_transport_lis_start(pjsua_transport_id id,
     pjsip_transport_type_e tp_type;
 
     /* Make sure id is in range. */
-    PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
-		     PJ_EINVAL);
+    // PJ_ASSERT_RETURN(id>=0 && id<(int)PJ_ARRAY_SIZE(pjsua_var.tpdata), 
+		//      PJ_EINVAL);
 
     /* Make sure that transport exists */
     PJ_ASSERT_RETURN(pjsua_var.tpdata[id].data.ptr != NULL, PJ_EINVAL);
@@ -3125,7 +3125,7 @@ void pjsua_init_tpselector(pjsua_transport_id tp_id,
     if (tp_id == PJSUA_INVALID_ID)
 	return;
 
-    pj_assert(tp_id >= 0 && tp_id < (int)PJ_ARRAY_SIZE(pjsua_var.tpdata));
+    // pj_assert(tp_id >= 0 && tp_id < (int)PJ_ARRAY_SIZE(pjsua_var.tpdata));
     tpdata = &pjsua_var.tpdata[tp_id];
 
     flag = pjsip_transport_get_flag_from_type(tpdata->type);

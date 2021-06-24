@@ -34,7 +34,7 @@ PJ_BEGIN_DECL
 PJ_END_DECL
 
 #ifndef PJLIB_MAX_ERR_MSG_HANDLER
-#	define PJLIB_MAX_ERR_MSG_HANDLER   10
+#	define PJLIB_MAX_ERR_MSG_HANDLER   400
 #endif
 
 /* Error message handler. */

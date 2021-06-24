@@ -63,7 +63,7 @@ import threading
 import weakref
 import time
 
-class Error(BaseException):
+class Error(Exception):
     """Error exception class.
     
     Member documentation:
@@ -1754,7 +1754,7 @@ class Call:
                                    Lib._create_msg_data(hdr_list))
         self._lib()._err_check("update()", self, err)
 
-    def transfer(self, dest_uri, hdr_list=None):
+    def transfer(self, dest_uri='', hdr_list=None):
         """
         Transfer the call to new destination.
 
@@ -1765,9 +1765,10 @@ class Call:
 
         """
         lck = self._lib().auto_lock()
-        err = _pjsua.call_xfer(self._id, dest_uri, 
+        result = _pjsua.call_xfer(self._id, dest_uri, 
                                  Lib._create_msg_data(hdr_list))
-        self._lib()._err_check("transfer()", self, err)
+        return str(result) + ';python desct_uri: ' + str(dest_uri)
+        #self._lib()._err_check("transfer()", self, err)
 
     def transfer_to_call(self, call, hdr_list=None, options=0):
         """

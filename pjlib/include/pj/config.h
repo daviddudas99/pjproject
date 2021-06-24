@@ -875,7 +875,7 @@
  * Default: 16
  */
 #ifndef PJ_MAX_EXCEPTION_ID
-#   define PJ_MAX_EXCEPTION_ID      16
+#   define PJ_MAX_EXCEPTION_ID      400
 #endif
 
 /**
